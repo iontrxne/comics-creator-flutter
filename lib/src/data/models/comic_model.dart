@@ -14,10 +14,21 @@ class Comic {
   });
 
   factory Comic.fromJson(Map<String, dynamic> json) {
+    // Проверяем и фильтруем некорректные пути к обложке
+    String? coverPath = json["cover_image_path"];
+
+    // Отфильтровываем некорректные пути обложки
+    if (coverPath == null ||
+        coverPath.isEmpty ||
+        coverPath == 'example.png' ||
+        !(coverPath.startsWith('uploads/covers/') || coverPath.startsWith('uploads/images/'))) {
+      coverPath = '';
+    }
+
     return Comic(
-      id: json['id'],
+      id: json['id'] != null ? json['id'] as int : null,
       title: json['title'],
-      coverImagePath: json["cover_image_path"],
+      coverImagePath: coverPath,
       createdAt: json["created_at"] != null
           ? DateTime.parse(json["created_at"])
           : null,
