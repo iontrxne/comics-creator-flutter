@@ -13,8 +13,10 @@ dependencies:
   cached_network_image: ^3.4.1
   flutter_animation_plus: ^0.0.7
   image_picker: ^1.1.2
+  image_cropper: ^9.0.0
   loading_indicator: ^3.1.1
   flutter_riverpod: ^2.6.1
+  intl: ^0.20.2
   dio: ^5.8.0+1
   flutter:
     sdk: flutter

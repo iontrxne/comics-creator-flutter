@@ -3,13 +3,20 @@ import 'package:flutter_animation_plus/animations/pulsing_animation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:loading_indicator/loading_indicator.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../config/environment.dart';
 import '../../../config/palette.dart';
 import '../../data/models/comic_model.dart';
 import '../../logic/comic/comic_provider.dart';
-import 'create_comics_form.dart';
+import '../comic/create_comics_form.dart';
+import 'package:intl/intl.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
+
+  String _formatDate(String isoDate) {
+    DateTime dateTime = DateTime.parse(isoDate);
+    return DateFormat('dd.MM.yyyy HH:mm').format(dateTime);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -34,7 +41,9 @@ class HomePage extends ConsumerWidget {
                   title: const Text('Твои комиксы'),
                   centerTitle: true,
                 ),
-                body: Container(
+                body: SafeArea(
+            child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       colors: [Palette.orangeDark, Palette.orangeAccent],
@@ -51,12 +60,33 @@ class HomePage extends ConsumerWidget {
                          child: Column(
                            crossAxisAlignment: CrossAxisAlignment.start,
                            children: [
-                             CachedNetworkImage(
-                               imageUrl: comics[index].coverImagePath ?? '',
-                               imageBuilder: (context, imageProvider) => Container(
+                             comics[index].coverImagePath?.isEmpty ?? true
+                               ? const SizedBox(
                                    width: double.infinity,
                                    height: 200,
+                                   child: Center(
+                                       child: SizedBox(
+                                           width: 200,
+                                           height: 200,
+                                           child: Column(
+                                               mainAxisAlignment: MainAxisAlignment.center,
+                                               children: [
+                                                 Icon(Icons.photo,
+                                                     size: 64,
+                                                     color: Colors.black),
+                                                 Text(
+                                                     'У этого комикса пока что нет обложки',
+                                                     textAlign: TextAlign.center,
+                                                     style: TextStyle(color: Colors.black))
+                                               ]))),
+                                 )
+                               : CachedNetworkImage(
+                                   imageUrl: '${Environment.API_URL}/images/${comics[index].coverImagePath}',
+                               imageBuilder: (context, imageProvider) => Container(
+                                   width: double.infinity,
+                                   height: 300,
                                    decoration: BoxDecoration(
+                                       borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
                                        image: DecorationImage(
                                            image: imageProvider,
                                            fit: BoxFit.cover))),
@@ -74,7 +104,7 @@ class HomePage extends ConsumerWidget {
                                            pathBackgroundColor: Colors.black))),
                                errorWidget: (context, url, error) => const Center(
                                    child: SizedBox(
-                                       width: 200,
+                                       width: double.infinity,
                                        height: 200,
                                        child: Column(
                                            mainAxisAlignment: MainAxisAlignment.center,
@@ -85,15 +115,30 @@ class HomePage extends ConsumerWidget {
                                                  style: TextStyle(color: Colors.red))
                                            ]))),
                              ),
-                             const Padding(
-                               padding: EdgeInsets.all(8.0),
-                               child: Text('Комикс',
-                                   style: TextStyle(fontWeight: FontWeight.bold)),
-                             ),
-                           ],
+                             // Container(
+                             //   height: 1,
+                             //   width: double.infinity,
+                             //   color: Palette.black,
+                             // ),
+                             Padding(
+                               padding:
+                                   const EdgeInsets.all(8.0),
+                               child: Column(
+                                 crossAxisAlignment: CrossAxisAlignment.start,
+                                 children: [
+                                   Text(
+                                       comics[index].title ?? 'Без названия',
+                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                   Text(
+                                     _formatDate(comics[index].updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String()),
+                                     style: const TextStyle(fontSize: 14),
+                                   ),
+                                 ],
+                               ))
+                            ],
                          ),
                        );
-                     })),
+                     }))),
                 floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
                 floatingActionButton: PulsingAnimation(
                   duration: const Duration(seconds: 1),

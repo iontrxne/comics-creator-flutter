@@ -18,5 +18,5 @@ class Palette {
   // Дополнительные цвета, которые хорошо сочетаются с оранжевым
   static const Color brown = Color(0xFF795548); // Коричневый
   static const Color grey = Color(0xFF9E9E9E); // Серый
-  static const Color lightGrey = Color(0xFFBDBDBD); // Светло-серый
+  static const Color lightGrey = Color(0xFFDFDFDF); // Светло-серый
 }
