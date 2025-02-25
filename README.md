@@ -37,7 +37,7 @@
 ## Установка
 
 1. Клонируйте репозиторий:
-- git clone https://github.com/yourusername/comics-creator.git
+- git clone https://github.com/iontrxne/comics-creator-flutter.git
 
 2. Перейдите в каталог проекта:
 - cd comics-creator
