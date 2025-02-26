@@ -69,10 +69,8 @@ class _ToolPanelState extends State<ToolPanel> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildToolButton(
-            icon: Icons.brush,
-            tool: DrawingTool.brush,
-            tooltip: 'Кисть',
+          _buildDrawToolsTypeButton(
+            context: context
           ),
           _buildToolButton(
             icon: Icons.text_fields,
@@ -102,6 +100,73 @@ class _ToolPanelState extends State<ToolPanel> {
           if (widget.selectedTool == DrawingTool.text)
             _buildFontSizeSlider(),
         ],
+      ),
+    );
+  }
+
+  DrawingTool _selectedTool = DrawingTool.brush;
+  final Map<DrawingTool, Map<String, dynamic>> _toolIcons = {
+    DrawingTool.fill: {'icon': Icons.format_color_fill, 'label': 'Заливка'},
+    DrawingTool.eraser: {'icon': Icons.cleaning_services, 'label': 'Ластик'},
+    DrawingTool.marker: {'icon': Icons.edit, 'label': 'Маркер'},
+    DrawingTool.brush: {'icon': Icons.brush, 'label': 'Кисть'},
+  };
+
+  void _openToolsMenu(BuildContext context, Function(DrawingTool tool) onChange) {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final position = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+    showMenu<DrawingTool>(
+      color: Palette.white,
+      context: context,
+      position: RelativeRect.fromSize(
+        Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+        size,
+      ),
+      items: _toolIcons.entries.map((entry) {
+        return PopupMenuItem<DrawingTool>(
+          value: entry.key,
+          child: Row(
+            children: [
+              Icon(entry.value['icon'], color: _selectedTool == entry.key ? Palette.orangeAccent : Colors.black),
+              const SizedBox(width: 8),
+              Text(entry.value['label'], style: TextStyle(color: _selectedTool == entry.key ? Palette.orangeAccent : Colors.black),),
+            ],
+          ),
+        );
+      }).toList(),
+
+    ).then((DrawingTool? selected) {
+      if (selected != null) {
+        onChange(selected);
+        setState(() {
+          _selectedTool = selected;
+        });
+      }
+    });
+  }
+
+  Widget _buildDrawToolsTypeButton({
+    required BuildContext context
+  }) {
+    final isSelected = _toolIcons.keys.contains(widget.selectedTool);
+    return Tooltip(
+      message: _toolIcons[_selectedTool]!['label'],
+      child: InkWell(
+        onTap: () => _openToolsMenu(context, widget.onToolChanged),
+        borderRadius: BorderRadius.circular(30),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isSelected ? Palette.orangeAccent : Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            _toolIcons[_selectedTool]!['icon'],
+            color: isSelected ? Colors.white : Colors.white70,
+            size: 24,
+          ),
+        ),
       ),
     );
   }

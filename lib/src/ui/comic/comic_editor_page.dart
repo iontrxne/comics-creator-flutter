@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:loading_indicator/loading_indicator.dart';
 import '../../../config/palette.dart';
 import '../../logic/comic/editor_provider.dart';
 import 'canvas/comic_canvas.dart';
 import 'canvas/tool_panel.dart';
+import 'create_comics_form.dart';
 
 class ComicEditorPage extends ConsumerStatefulWidget {
   final int comicId;
@@ -58,20 +61,97 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
                 ? () => ref.read(comicEditorProvider.notifier).redo()
                 : null,
           ),
-          // Кнопка сохранения
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: () => ref.read(comicEditorProvider.notifier).saveCurrentCell(),
-          ),
-          // Кнопка обновления холста
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                _canvasKey = UniqueKey(); // Обновляем ключ для пересоздания холста
-              });
+
+          PopupMenuButton<int>(
+            tooltip: "Меню",
+            color: Palette.white,
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              switch (value) {
+                case 1:
+                  ref.read(comicEditorProvider.notifier).saveCurrentCell();
+                  break;
+                case 2:
+                  _canvasKey = UniqueKey(); // Обновляем ключ для пересоздания холста
+                  break;
+                case 3: //todo удалить комикс
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: const Text('Подтвердите удаление'),
+                        content: const Text('Вы точно хотите удалить этот комикс?'),
+                        actions: <Widget>[
+                          TextButton(
+                            onPressed: () {
+                              // Закрыть диалог без удаления
+                              Navigator.of(context).pop();
+                            },
+                            child: const Text('Отмена', style: TextStyle(color: Colors.black),),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              // Логика удаления комикса
+                              // Здесь нужно добавить код для удаления комикса
+                              Navigator.of(context).pop();
+                            },
+                            child: const Text('Удалить', style: TextStyle(color: Colors.red),),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                  break;
+                case 4:
+                  Navigator.of(context).push<int?>(
+                      MaterialPageRoute(builder: (c) => CreateComicForm(title: widget.comicTitle, isEdit: true,)));
+                  break;
+                default:
+                  break;
+              }
             },
-            tooltip: 'Обновить холст',
+            itemBuilder: (context) => [
+              const PopupMenuItem<int>(
+                value: 1,
+                child: Row(
+                  children: [
+                    Icon(Icons.save, color: Palette.black,),
+                    SizedBox(width: 8),
+                    Text('Сохранить'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<int>(
+                value: 2,
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, color: Palette.black,),
+                    SizedBox(width: 8),
+                    Text('Обновить холст'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<int>(
+                value: 3,
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_forever, color: Palette.black,),
+                    SizedBox(width: 8),
+                    Text('Удалить комикс'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<int>(
+                value: 4,
+                child: Row(
+                  children: [
+                    Icon(Icons.mode_edit_outlined, color: Palette.black,),
+                    SizedBox(width: 8),
+                    Text('Редактировать описание'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -163,7 +243,16 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
             // Основной холст для рисования
             Expanded(
               child: editorState.isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(
+                    child: LoadingIndicator(
+                      indicatorType: Indicator.ballClipRotateMultiple,
+                      colors: [
+                        Palette.white,
+                      ],
+                      strokeWidth: 3,
+                      backgroundColor: Colors.transparent,
+                      pathBackgroundColor: Colors.black,
+                      ))
                   : editorState.pages.isEmpty
                   ? _buildEmptyState()
                   : editorState.currentCell == null
@@ -223,7 +312,6 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
             style: TextStyle(
               color: Colors.white,
               fontSize: 24,
-              fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
@@ -276,7 +364,6 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
             style: TextStyle(
               color: Colors.white,
               fontSize: 24,
-              fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),

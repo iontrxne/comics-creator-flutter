@@ -4,21 +4,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:loading_indicator/loading_indicator.dart';
 
 import '../../../config/palette.dart';
 import '../../logic/comic/comic_provider.dart';
 import '../../logic/image/image_provider.dart';
 
-class CreateComicForm extends ConsumerWidget {
-  const CreateComicForm({super.key});
+class CreateComicForm extends ConsumerStatefulWidget {
+  final String? title;
+  final bool? isEdit;
+
+  const CreateComicForm({this.title, this.isEdit, super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final titleController = TextEditingController();
+  _CreateComicFormState createState() => _CreateComicFormState();
+}
+
+class _CreateComicFormState extends ConsumerState<CreateComicForm> {
+  final titleController = TextEditingController();
+
+  @override
+  void initState() {
+    if (widget.isEdit == true) titleController.text = widget.title ?? "";
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
 
     return Scaffold(
         appBar: AppBar(
-          title: const Text('Создай новый комикс!'),
+          title: Text(widget.title != null ? widget.title  ?? 'Неизвестное название' : 'Создай новый комикс!'),
           centerTitle: true,
           backgroundColor: Palette.orangeDark,
         ),
@@ -134,7 +151,8 @@ class CreateComicForm extends ConsumerWidget {
                   }),
                 ),
                 const SizedBox(height: 16),
-                ElevatedButton(
+                if (widget.isEdit == null || widget.isEdit == false)
+                  ElevatedButton(
                   onPressed: () async {
                     if (titleController.text.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -153,7 +171,15 @@ class CreateComicForm extends ConsumerWidget {
                     showDialog(
                       context: context,
                       barrierDismissible: false,
-                      builder: (context) => const Center(child: CircularProgressIndicator()),
+                      builder: (context) => const Center(child: LoadingIndicator(
+                        indicatorType: Indicator.ballClipRotateMultiple,
+                        colors: [
+                          Palette.white,
+                        ],
+                        strokeWidth: 3,
+                        backgroundColor: Colors.transparent,
+                        pathBackgroundColor: Colors.black,
+                      ),),
                     );
 
                     final imageFile = ref.watch(imageProvider);
@@ -238,6 +264,19 @@ class CreateComicForm extends ConsumerWidget {
                     style: TextStyle(fontSize: 20, color: Colors.brown),
                   ),
                 ),
+                if (widget.isEdit == true)
+                  ElevatedButton(
+                    onPressed: () {
+                      //todo логика обновления
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Palette.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text(
+                      'Обновить',
+                      style: TextStyle(fontSize: 20, color: Colors.brown),
+                    ),)
               ],
             ),
           ),
