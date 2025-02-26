@@ -13,14 +13,14 @@ class ComicCanvas extends StatefulWidget {
   final Function(CellContent) onContentChanged;
 
   const ComicCanvas({
-    Key? key,
+    super.key,
     required this.currentCell,
     required this.tool,
     required this.color,
     required this.thickness,
     required this.fontSize,
     required this.onContentChanged,
-  }) : super(key: key);
+  });
 
   @override
   ComicCanvasState createState() => ComicCanvasState();
@@ -76,7 +76,7 @@ class ComicCanvasState extends State<ComicCanvas> {
   }
 
   void _initializeController() {
-    print("Инициализация контроллера для ячейки ${widget.currentCell.id} с contentJson: ${widget.currentCell.contentJson.length > 30 ? widget.currentCell.contentJson.substring(0, 30) + '...' : widget.currentCell.contentJson}");
+    print("Инициализация контроллера для ячейки ${widget.currentCell.id} с contentJson: ${widget.currentCell.contentJson.length > 30 ? '${widget.currentCell.contentJson.substring(0, 30)}...' : widget.currentCell.contentJson}");
 
     // Явно очищаем старый контроллер перед созданием нового
     _controller = null;

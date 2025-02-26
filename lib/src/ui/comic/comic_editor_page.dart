@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/palette.dart';
-import '../../data/models/comic_model.dart';
 import '../../logic/comic/editor_provider.dart';
 import 'canvas/comic_canvas.dart';
 import 'canvas/tool_panel.dart';
@@ -11,10 +10,10 @@ class ComicEditorPage extends ConsumerStatefulWidget {
   final String comicTitle;
 
   const ComicEditorPage({
-    Key? key,
+    super.key,
     required this.comicId,
     required this.comicTitle,
-  }) : super(key: key);
+  });
 
   @override
   ComicEditorPageState createState() => ComicEditorPageState();

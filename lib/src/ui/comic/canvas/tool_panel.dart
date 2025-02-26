@@ -14,7 +14,7 @@ class ToolPanel extends StatefulWidget {
   final Color currentColor;
 
   const ToolPanel({
-    Key? key,
+    super.key,
     required this.selectedTool,
     required this.onToolChanged,
     required this.onColorChanged,
@@ -23,7 +23,7 @@ class ToolPanel extends StatefulWidget {
     this.currentThickness = 3.0,
     this.currentFontSize = 16.0,
     this.currentColor = Colors.black,
-  }) : super(key: key);
+  });
 
   @override
   State<ToolPanel> createState() => _ToolPanelState();

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 enum DrawingTool {
@@ -332,7 +331,7 @@ class CanvasController {
     }
   }
 
-  // Обработка окончания рисования
+// Метод endDrawing, который вызывается при завершении рисования
   void endDrawing() {
     if (currentTool == DrawingTool.brush && _currentPoints.length > 1) {
       final element = BrushElement(
@@ -348,7 +347,7 @@ class CanvasController {
     _selectedElementIndex = null;
   }
 
-  // Добавление текста
+
   void addText(String text, Offset position) {
     final element = TextElement(
       text: text,
