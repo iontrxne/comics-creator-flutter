@@ -175,8 +175,8 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
                 color: editorState.currentColor,
                 thickness: editorState.currentThickness,
                 fontSize: editorState.currentFontSize,
-                onContentChanged: (content) =>
-                    ref.read(comicEditorProvider.notifier).updateCurrentCellContent(content),
+                onContentChanged: (content, [previousContent]) =>
+                    ref.read(comicEditorProvider.notifier).updateCurrentCellContent(content, previousContent),
               ),
             ),
 

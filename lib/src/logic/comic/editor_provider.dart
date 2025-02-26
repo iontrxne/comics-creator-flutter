@@ -838,26 +838,14 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
   }
   Timer? _saveDebounceTimer;
   // Исправленный метод updateCurrentCellContent()
-  void updateCurrentCellContent(CellContent content) {
+  void updateCurrentCellContent(CellContent content, [CellContent? previousContent]) {
     if (state.currentCell == null) {
       print("Нет текущей ячейки для обновления");
       return;
     }
 
-    // Получаем текущее содержимое
-    CellContent? oldContent;
-    try {
-      oldContent = CellContent.fromJsonString(state.currentCell!.contentJson);
-    } catch (e) {
-      print("Ошибка при парсинге текущего содержимого: $e");
-    }
-
-    // Проверяем, изменилось ли содержимое
-    bool contentChanged = true;
-    if (oldContent != null) {
-      // Проверяем изменения путем сравнения количества элементов
-      contentChanged = oldContent.elements.length != content.elements.length;
-    }
+    // Флаг для определения, нужно ли сохранить историю
+    bool shouldSaveForHistory = previousContent != null;
 
     final updatedCell = state.currentCell!.copyWith(
       contentJson: content.toJsonString(),
@@ -891,12 +879,17 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     state = state.copyWith(
       pages: updatedPages,
       currentCell: updatedCell,
-      canUndo: hasContent,  // Можно отменить только если есть содержимое
+      canUndo: hasContent,
       canRedo: state.canRedo,
     );
 
-    // Если содержимое изменилось, автоматически сохраняем ячейку с дебаунсингом
-    if (contentChanged) {
+    // Если передано предыдущее состояние, сохраняем его в историю
+    if (shouldSaveForHistory) {
+      print("Сохраняем предыдущее состояние для истории");
+      // Сохраняем предыдущее состояние без дебаунсинга для точного сохранения истории
+      saveCurrentCell(showLoading: false, previousContent: previousContent);
+    } else {
+      // Если это просто обновление без явных действий пользователя, используем стандартное сохранение с дебаунсингом
       _debouncedSave();
     }
   }
@@ -923,9 +916,8 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     super.dispose();
   }
 
-  // Исправленный метод saveCurrentCell()
-  // Модифицированный метод saveCurrentCell()
-  Future<bool> saveCurrentCell({bool showLoading = true}) async {
+// Обновленный метод saveCurrentCell() с поддержкой previousContent
+  Future<bool> saveCurrentCell({bool showLoading = true, CellContent? previousContent}) async {
     if (state.currentCell == null) {
       print("Нет текущей ячейки для сохранения");
       return false;
@@ -947,114 +939,158 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
 
       String domain = baseUrl.split('/').sublist(0, 3).join('/');
 
-      // Формируем URL точно в том формате, который требует сервер (БЕЗ слеша в конце)
-      final String url = "$baseUrl/cells/${state.currentCell!.id}";
-      print("Отправка запроса на URL (без слеша в конце): $url");
+      // Если есть предыдущее состояние, используем специальный эндпоинт для сохранения истории
+      if (previousContent != null) {
+        // Формируем URL для сохранения с историей
+        final String url = "$baseUrl/cells/${state.currentCell!.id}/save-with-history";
+        print("Отправка запроса на URL (сохранение с историей): $url");
 
-      // Подготавливаем данные для отправки
-      final Map<String, dynamic> cellData = {
-        'position_x': state.currentCell!.positionX,
-        'position_y': state.currentCell!.positionY,
-        'width': state.currentCell!.width,
-        'height': state.currentCell!.height,
-        'z_index': state.currentCell!.zIndex,
-        'content_json': state.currentCell!.contentJson,
-      };
+        // Подготавливаем данные для отправки
+        final Map<String, dynamic> postData = {
+          'current_cell': {
+            'position_x': state.currentCell!.positionX,
+            'position_y': state.currentCell!.positionY,
+            'width': state.currentCell!.width,
+            'height': state.currentCell!.height,
+            'z_index': state.currentCell!.zIndex,
+            'content_json': state.currentCell!.contentJson,
+          },
+          'previous_content_json': previousContent.toJsonString(),
+        };
 
-      // Создаем HTTP клиент напрямую, чтобы избежать проблем с Dio и перенаправлениями
-      final client = http.Client();
+        // Создаем HTTP клиент напрямую
+        final client = http.Client();
 
-      try {
-        // Используем HTTP напрямую без библиотек с автоматическим перенаправлением
-        final response = await client.put(
-          Uri.parse(url),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(cellData),
-        );
-
-        print("Получен ответ: ${response.statusCode}");
-        print("Заголовки ответа: ${response.headers}");
-
-        // Проверяем статус ответа
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          print("Ячейка сохранена успешно: ${response.statusCode}");
-
-          // Запрашиваем обновленную ячейку с сервера
-          await _refreshCurrentCell();
-
-          // ИСПРАВЛЕНИЕ: устанавливаем флаги canUndo и canRedo в true
-          // после успешного сохранения ячейки, так как теперь есть история изменений
-          state = state.copyWith(
-            isLoading: false,
-            errorMessage: null,
-            canUndo: true,  // Устанавливаем возможность отмены
-            canRedo: false, // Redo пока не доступен, так как мы только что сохранили
+        try {
+          // Отправляем POST запрос
+          final response = await client.post(
+            Uri.parse(url),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(postData),
           );
 
-          return true;
-        }
-        // Если это не успешный ответ, но и не перенаправление
-        else if (response.statusCode != 301 && response.statusCode != 302 &&
-            response.statusCode != 307 && response.statusCode != 308) {
-          throw Exception("Ошибка сохранения ячейки: ${response.statusCode}, ${response.body}");
-        }
-        // Обрабатываем перенаправление только один раз
-        else {
-          final String? redirectUrl = response.headers['location'];
-          print("Получено перенаправление на: $redirectUrl");
+          print("Получен ответ при сохранении с историей: ${response.statusCode}");
 
-          if (redirectUrl != null && redirectUrl.isNotEmpty) {
-            // Важно! Не добавляем слеш в конце, если его нет в заголовке Location
-            String fullRedirectUrl;
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            print("Ячейка успешно сохранена с историей");
 
-            if (redirectUrl.startsWith('http')) {
-              // Абсолютный URL
-              fullRedirectUrl = redirectUrl;
-            } else {
-              // Относительный URL
-              String cleanRedirectUrl = redirectUrl.startsWith('/')
-                  ? redirectUrl.substring(1)
-                  : redirectUrl;
-              fullRedirectUrl = "$domain/$cleanRedirectUrl";
-            }
+            // Парсим ответ
+            final responseData = jsonDecode(response.body);
 
-            print("Отправка запроса на перенаправленный URL: $fullRedirectUrl");
-
-            // Выполняем запрос по URL перенаправления без модификаций
-            final redirectResponse = await client.put(
-              Uri.parse(fullRedirectUrl),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode(cellData),
+            // Обновляем статусы возможности Undo/Redo из ответа сервера
+            state = state.copyWith(
+              isLoading: false,
+              errorMessage: null,
+              canUndo: responseData['can_undo'] ?? state.canUndo,
+              canRedo: responseData['can_redo'] ?? state.canRedo,
             );
 
-            print("Получен ответ после перенаправления: ${redirectResponse.statusCode}");
+            return true;
+          } else {
+            throw Exception("Ошибка при сохранении с историей: ${response.statusCode}, ${response.body}");
+          }
+        } finally {
+          client.close();
+        }
+      } else {
+        // Обычное сохранение ячейки (без истории) - оставляем существующий код
+        // Формируем URL точно в том формате, который требует сервер (БЕЗ слеша в конце)
+        final String url = "$baseUrl/cells/${state.currentCell!.id}";
+        print("Отправка запроса на URL (без слеша в конце): $url");
 
-            if (redirectResponse.statusCode >= 200 && redirectResponse.statusCode < 300) {
-              print("Ячейка сохранена успешно после перенаправления: ${redirectResponse.statusCode}");
+        // Подготавливаем данные для отправки
+        final Map<String, dynamic> cellData = {
+          'position_x': state.currentCell!.positionX,
+          'position_y': state.currentCell!.positionY,
+          'width': state.currentCell!.width,
+          'height': state.currentCell!.height,
+          'z_index': state.currentCell!.zIndex,
+          'content_json': state.currentCell!.contentJson,
+        };
 
-              // Запрашиваем обновленную ячейку с сервера
-              await _refreshCurrentCell();
+        // Создаем HTTP клиент напрямую, чтобы избежать проблем с Dio и перенаправлениями
+        final client = http.Client();
 
-              // ИСПРАВЛЕНИЕ: устанавливаем флаги canUndo и canRedo в true
-              // после успешного сохранения ячейки
-              state = state.copyWith(
-                isLoading: false,
-                errorMessage: null,
-                canUndo: true,  // Устанавливаем возможность отмены
-                canRedo: false, // Redo пока не доступен, так как мы только что сохранили
+        try {
+          // Используем HTTP напрямую без библиотек с автоматическим перенаправлением
+          final response = await client.put(
+            Uri.parse(url),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(cellData),
+          );
+
+          print("Получен ответ: ${response.statusCode}");
+          print("Заголовки ответа: ${response.headers}");
+
+          // Проверяем статус ответа
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            print("Ячейка сохранена успешно: ${response.statusCode}");
+
+            // Запрашиваем обновленную ячейку с сервера
+            await _refreshCurrentCell();
+
+            // После сохранения обновляем статус Undo/Redo
+            await _refreshUndoRedoStatus();
+
+            return true;
+          }
+          // Если это не успешный ответ, но и не перенаправление
+          else if (response.statusCode != 301 && response.statusCode != 302 &&
+              response.statusCode != 307 && response.statusCode != 308) {
+            throw Exception("Ошибка сохранения ячейки: ${response.statusCode}, ${response.body}");
+          }
+          // Обрабатываем перенаправление только один раз
+          else {
+            final String? redirectUrl = response.headers['location'];
+            print("Получено перенаправление на: $redirectUrl");
+
+            if (redirectUrl != null && redirectUrl.isNotEmpty) {
+              // Важно! Не добавляем слеш в конце, если его нет в заголовке Location
+              String fullRedirectUrl;
+
+              if (redirectUrl.startsWith('http')) {
+                // Абсолютный URL
+                fullRedirectUrl = redirectUrl;
+              } else {
+                // Относительный URL
+                String cleanRedirectUrl = redirectUrl.startsWith('/')
+                    ? redirectUrl.substring(1)
+                    : redirectUrl;
+                fullRedirectUrl = "$domain/$cleanRedirectUrl";
+              }
+
+              print("Отправка запроса на перенаправленный URL: $fullRedirectUrl");
+
+              // Выполняем запрос по URL перенаправления без модификаций
+              final redirectResponse = await client.put(
+                Uri.parse(fullRedirectUrl),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode(cellData),
               );
 
-              return true;
-            } else {
-              throw Exception("Ошибка сохранения ячейки после перенаправления: ${redirectResponse.statusCode}, ${redirectResponse.body}");
+              print("Получен ответ после перенаправления: ${redirectResponse.statusCode}");
+
+              if (redirectResponse.statusCode >= 200 && redirectResponse.statusCode < 300) {
+                print("Ячейка сохранена успешно после перенаправления: ${redirectResponse.statusCode}");
+
+                // Запрашиваем обновленную ячейку с сервера
+                await _refreshCurrentCell();
+
+                // После сохранения обновляем статус Undo/Redo
+                await _refreshUndoRedoStatus();
+
+                return true;
+              } else {
+                throw Exception("Ошибка сохранения ячейки после перенаправления: ${redirectResponse.statusCode}, ${redirectResponse.body}");
+              }
             }
           }
-        }
 
-        throw Exception("Неожиданное поведение при сохранении ячейки");
-      } finally {
-        // Закрываем HTTP клиент
-        client.close();
+          throw Exception("Неожиданное поведение при сохранении ячейки");
+        } finally {
+          // Закрываем HTTP клиент
+          client.close();
+        }
       }
     } catch (e) {
       print("ОШИБКА при сохранении ячейки: $e");
@@ -1064,7 +1100,11 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
       );
       return false;
     }
+
+    // Этот код никогда не должен выполниться, но Dart требует возврат значения
+    return false;
   }
+
 
   // Обновление текущей ячейки с сервера
   Future<void> _refreshCurrentCell() async {
@@ -1189,6 +1229,36 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     }
   }
 
+  Future<void> _refreshUndoRedoStatus() async {
+    if (state.currentCell == null) return;
+
+    try {
+      // Получаем базовый URL без слеша в конце
+      String baseUrl = Environment.API_URL;
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
+      final String url = "$baseUrl/cells/${state.currentCell!.id}/undo-redo-status";
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body);
+        bool canUndo = data['can_undo'] ?? false;
+        bool canRedo = data['can_redo'] ?? false;
+
+        state = state.copyWith(
+          canUndo: canUndo,
+          canRedo: canRedo,
+        );
+
+        print("Обновлен статус Undo/Redo: canUndo=$canUndo, canRedo=$canRedo");
+      }
+    } catch (e) {
+      print("Ошибка обновления статуса Undo/Redo: $e");
+    }
+  }
+
 // Вспомогательный метод для обновления ячейки в состоянии (остается без изменений)
   void _updateCellInState(Cell updatedCell) {
     final updatedPages = state.pages.map((page) {
@@ -1238,6 +1308,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     state = state.copyWith(currentFontSize: fontSize);
   }
 
+  // Функция отмены последнего действия (Undo)
   // Функция отмены последнего действия (Undo)
   Future<void> undo() async {
     if (state.currentCell == null) {
@@ -1305,24 +1376,37 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
             return page;
           }).toList();
 
-          // Проверяем содержимое ячейки, чтобы определить, можно ли выполнить еще одну отмену
+          // После успешного выполнения undo, проверяем возможность дальнейшего undo
+          // Делаем запрос на новый эндпоинт
           bool canUndoMore = false;
           try {
-            final contentJson = updatedCell.contentJson;
-            if (contentJson.isNotEmpty && contentJson != '{"elements":[]}') {
-              final content = CellContent.fromJsonString(contentJson);
-              canUndoMore = content.elements.isNotEmpty;
+            final String checkUrl = "$baseUrl/cells/${updatedCell.id}/can-undo";
+            final checkResponse = await http.get(Uri.parse(checkUrl));
+
+            if (checkResponse.statusCode >= 200 && checkResponse.statusCode < 300) {
+              final checkData = jsonDecode(checkResponse.body);
+              canUndoMore = checkData['can_undo'] ?? false;
+              print("Проверка возможности дальнейшего Undo: $canUndoMore");
             }
           } catch (e) {
-            print("Ошибка при проверке содержимого ячейки: $e");
+            print("Ошибка при проверке возможности дальнейшего Undo: $e");
+            // Если запрос не удался, используем стандартную проверку на основе содержимого
+            try {
+              final contentJson = updatedCell.contentJson;
+              if (contentJson.isNotEmpty && contentJson != '{"elements":[]}') {
+                final content = CellContent.fromJsonString(contentJson);
+                canUndoMore = content.elements.isNotEmpty;
+              }
+            } catch (e) {
+              print("Ошибка при проверке содержимого ячейки: $e");
+            }
           }
 
-          // После undo, нужно установить, что теперь можно сделать redo
           state = state.copyWith(
             isLoading: false,
             pages: updatedPages,
             currentCell: updatedCell,
-            canUndo: canUndoMore,  // Можно отменить еще только если есть содержимое
+            canUndo: canUndoMore,  // Используем результат проверки
             canRedo: true,         // После undo всегда можно сделать redo
             errorMessage: null,
           );
@@ -1393,24 +1477,37 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
                 return page;
               }).toList();
 
-              // Проверяем содержимое ячейки после отмены
+              // После успешного выполнения undo, проверяем возможность дальнейшего undo
+              // Делаем запрос на новый эндпоинт
               bool canUndoMore = false;
               try {
-                final contentJson = updatedCell.contentJson;
-                if (contentJson.isNotEmpty && contentJson != '{"elements":[]}') {
-                  final content = CellContent.fromJsonString(contentJson);
-                  canUndoMore = content.elements.isNotEmpty;
+                final String checkUrl = "$baseUrl/cells/${updatedCell.id}/can-undo";
+                final checkResponse = await http.get(Uri.parse(checkUrl));
+
+                if (checkResponse.statusCode >= 200 && checkResponse.statusCode < 300) {
+                  final checkData = jsonDecode(checkResponse.body);
+                  canUndoMore = checkData['can_undo'] ?? false;
+                  print("Проверка возможности дальнейшего Undo: $canUndoMore");
                 }
               } catch (e) {
-                print("Ошибка при проверке содержимого ячейки: $e");
+                print("Ошибка при проверке возможности дальнейшего Undo: $e");
+                // Если запрос не удался, используем стандартную проверку на основе содержимого
+                try {
+                  final contentJson = updatedCell.contentJson;
+                  if (contentJson.isNotEmpty && contentJson != '{"elements":[]}') {
+                    final content = CellContent.fromJsonString(contentJson);
+                    canUndoMore = content.elements.isNotEmpty;
+                  }
+                } catch (e) {
+                  print("Ошибка при проверке содержимого ячейки: $e");
+                }
               }
 
-              // После undo, нужно установить, что теперь можно сделать redo
               state = state.copyWith(
                 isLoading: false,
                 pages: updatedPages,
                 currentCell: updatedCell,
-                canUndo: canUndoMore,  // Можно отменить еще только если есть содержимое
+                canUndo: canUndoMore,  // Используем результат проверки
                 canRedo: true,         // После undo всегда можно сделать redo
                 errorMessage: null,
               );

@@ -277,7 +277,8 @@ class CellContent {
 // Контроллер для работы с холстом
 class CanvasController {
   CellContent _content;
-  final Function(CellContent) onContentChanged;
+  // Обновленная сигнатура функции обратного вызова - теперь с двумя параметрами
+  final Function(CellContent content, [CellContent? previousContent]) onContentChanged;
 
   // Текущие настройки рисования
   DrawingTool currentTool = DrawingTool.brush;
@@ -289,6 +290,7 @@ class CanvasController {
   List<Point> _currentPoints = [];
   int? _selectedElementIndex;
 
+  // Конструктор не меняется, но используется обновленная сигнатура функции
   CanvasController({
     required String initialContentJson,
     required this.onContentChanged,
@@ -307,9 +309,9 @@ class CanvasController {
     notifyContentChanged();
   }
 
-  // Оповещение об изменении содержимого
-  void notifyContentChanged() {
-    onContentChanged(_content);
+  // Обновленный метод уведомления об изменении содержимого
+  void notifyContentChanged([CellContent? previousContent]) {
+    onContentChanged(_content, previousContent);
   }
 
   // Обработка начала рисования
@@ -331,24 +333,31 @@ class CanvasController {
     }
   }
 
-// Метод endDrawing, который вызывается при завершении рисования
+  // Обновленный метод endDrawing, с сохранением предыдущего состояния
   void endDrawing() {
     if (currentTool == DrawingTool.brush && _currentPoints.length > 1) {
+      // Сохраняем текущее состояние перед изменением
+      final previousContent = _content.copy();
+
       final element = BrushElement(
         color: '#${currentColor.value.toRadixString(16).substring(2)}',
         thickness: currentThickness,
         points: _currentPoints,
       );
       _content.addElement(element);
-      notifyContentChanged();
+
+      // Передаем предыдущее состояние при уведомлении об изменении
+      notifyContentChanged(previousContent);
     }
 
     _currentPoints = [];
     _selectedElementIndex = null;
   }
 
-
   void addText(String text, Offset position) {
+    // Сохраняем текущее состояние перед изменением
+    final previousContent = _content.copy();
+
     final element = TextElement(
       text: text,
       fontSize: currentFontSize,
@@ -357,11 +366,16 @@ class CanvasController {
       y: position.dy,
     );
     _content.addElement(element);
-    notifyContentChanged();
+
+    // Передаем предыдущее состояние
+    notifyContentChanged(previousContent);
   }
 
   // Добавление изображения
   void addImage(String path, Offset position, {double? width, double? height}) {
+    // Сохраняем текущее состояние перед изменением
+    final previousContent = _content.copy();
+
     final element = ImageElement(
       path: path,
       x: position.dx,
@@ -370,13 +384,20 @@ class CanvasController {
       height: height,
     );
     _content.addElement(element);
-    notifyContentChanged();
+
+    // Передаем предыдущее состояние
+    notifyContentChanged(previousContent);
   }
 
   // Очистка содержимого
   void clear() {
+    // Сохраняем текущее состояние перед изменением
+    final previousContent = _content.copy();
+
     _content.clear();
-    notifyContentChanged();
+
+    // Передаем предыдущее состояние
+    notifyContentChanged(previousContent);
   }
 
   // Поиск элемента по позиции
@@ -411,6 +432,9 @@ class CanvasController {
   void _moveSelectedElement(Offset newPosition) {
     if (_selectedElementIndex == null) return;
 
+    // Сохраняем текущее состояние перед изменением
+    final previousContent = _content.copy();
+
     final element = _content.elements[_selectedElementIndex!];
 
     if (element is TextElement) {
@@ -423,7 +447,7 @@ class CanvasController {
         fontFamily: element.fontFamily,
       );
       _content.elements[_selectedElementIndex!] = updatedElement;
-      notifyContentChanged();
+      notifyContentChanged(previousContent);
     } else if (element is ImageElement) {
       final updatedElement = ImageElement(
         path: element.path,
@@ -433,7 +457,7 @@ class CanvasController {
         height: element.height,
       );
       _content.elements[_selectedElementIndex!] = updatedElement;
-      notifyContentChanged();
+      notifyContentChanged(previousContent);
     }
   }
 }

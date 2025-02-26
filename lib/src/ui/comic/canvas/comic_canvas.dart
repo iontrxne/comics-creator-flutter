@@ -10,7 +10,7 @@ class ComicCanvas extends StatefulWidget {
   final Color color;
   final double thickness;
   final double fontSize;
-  final Function(CellContent) onContentChanged;
+  final Function(CellContent, [CellContent?]) onContentChanged;
 
   const ComicCanvas({
     super.key,
@@ -102,9 +102,9 @@ class ComicCanvasState extends State<ComicCanvas> {
     try {
       _controller = CanvasController(
         initialContentJson: initialContentJson,
-        onContentChanged: (content) {
+        onContentChanged: (content, [previousContent]) {
           _lastContent = content;
-          widget.onContentChanged(content);
+          widget.onContentChanged(content, previousContent);
         },
       );
       print("Контроллер успешно инициализирован");
@@ -113,9 +113,9 @@ class ComicCanvasState extends State<ComicCanvas> {
       // Создаем контроллер с пустым контентом
       _controller = CanvasController(
         initialContentJson: '{"elements":[]}',
-        onContentChanged: (content) {
+        onContentChanged: (content, [previousContent]) {
           _lastContent = content;
-          widget.onContentChanged(content);
+          widget.onContentChanged(content, previousContent);
         },
       );
     }
@@ -366,6 +366,9 @@ class ComicCanvasState extends State<ComicCanvas> {
           ),
           maxLines: null,
           onChanged: (value) {
+            // Сохраняем текущее состояние перед изменением
+            final previousContent = _controller!.content.copy();
+
             // Обновление текста в реальном времени
             final updatedElement = TextElement(
               text: value,
@@ -378,7 +381,7 @@ class ComicCanvasState extends State<ComicCanvas> {
 
             final updatedContent = _controller!.content;
             updatedContent.elements[_editingTextIndex!] = updatedElement;
-            widget.onContentChanged(updatedContent);
+            widget.onContentChanged(updatedContent, previousContent);
           },
         ),
       ),
