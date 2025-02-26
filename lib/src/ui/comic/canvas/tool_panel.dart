@@ -193,56 +193,72 @@ class _ToolPanelState extends State<ToolPanel> {
     );
   }
 
+// Исправленный метод для слайдера толщины линии
   Widget _buildThicknessSlider() {
     return Expanded(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min, // Минимизируем размер по основной оси
         children: [
-          Slider(
-            value: _currentThickness,
-            min: 1,
-            max: 15,
-            divisions: 14,
-            activeColor: Palette.orangeAccent,
-            inactiveColor: Colors.white30,
-            onChanged: (value) {
-              setState(() {
-                _currentThickness = value;
-              });
-              widget.onThicknessChanged(value);
-            },
+          SizedBox(
+            height: 40, // Ограничиваем высоту слайдера
+            child: Slider(
+              value: _currentThickness,
+              min: 1,
+              max: 15,
+              divisions: 14,
+              activeColor: Palette.orangeAccent,
+              inactiveColor: Colors.white30,
+              onChanged: (value) {
+                setState(() {
+                  _currentThickness = value;
+                });
+                widget.onThicknessChanged(value);
+              },
+            ),
           ),
-          Text(
-            'Толщина: ${_currentThickness.toStringAsFixed(1)}',
-            style: const TextStyle(color: Colors.white, fontSize: 10),
+          SizedBox(
+            height: 12, // Фиксированная высота для текста
+            child: Text(
+              'Толщина: ${_currentThickness.toStringAsFixed(1)}',
+              style: const TextStyle(color: Colors.white, fontSize: 9),
+            ),
           ),
         ],
       ),
     );
   }
 
+// Исправленный метод для слайдера размера шрифта
   Widget _buildFontSizeSlider() {
     return Expanded(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min, // Минимизируем размер по основной оси
         children: [
-          Slider(
-            value: _currentFontSize,
-            min: 8,
-            max: 48,
-            divisions: 20,
-            activeColor: Palette.orangeAccent,
-            inactiveColor: Colors.white30,
-            onChanged: (value) {
-              setState(() {
-                _currentFontSize = value;
-              });
-              widget.onFontSizeChanged(value);
-            },
+          SizedBox(
+            height: 40, // Ограничиваем высоту слайдера
+            child: Slider(
+              value: _currentFontSize,
+              min: 8,
+              max: 48,
+              divisions: 20,
+              activeColor: Palette.orangeAccent,
+              inactiveColor: Colors.white30,
+              onChanged: (value) {
+                setState(() {
+                  _currentFontSize = value;
+                });
+                widget.onFontSizeChanged(value);
+              },
+            ),
           ),
-          Text(
-            'Размер: ${_currentFontSize.toStringAsFixed(1)}',
-            style: const TextStyle(color: Colors.white, fontSize: 10),
+          SizedBox(
+            height: 12, // Фиксированная высота для текста
+            child: Text(
+              'Размер: ${_currentFontSize.toStringAsFixed(1)}',
+              style: const TextStyle(color: Colors.white, fontSize: 9),
+            ),
           ),
         ],
       ),

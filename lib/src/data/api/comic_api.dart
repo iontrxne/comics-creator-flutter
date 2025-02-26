@@ -10,17 +10,45 @@ class ComicApi {
   final Dio _dio = Dio();
 
   ComicApi() {
+    // Нормализация базового URL
+    String baseUrl = Environment.API_URL;
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    }
+
+    _dio.options.baseUrl = baseUrl;
     _dio.options.followRedirects = true;
     _dio.options.connectTimeout = const Duration(seconds: 5);
     _dio.options.receiveTimeout = const Duration(seconds: 5);
     _dio.options.validateStatus = (status) {
       return status! < 500; // Принимать коды ответа до 500
     };
+
+    // Добавляем интерцептор для обеспечения наличия слеша в конце URL
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        // Убеждаемся, что URL заканчивается на "/" для всех запросов кроме загрузки файлов
+        if (!options.path.endsWith('/') && !options.path.contains('upload')) {
+          options.path = "${options.path}/";
+        }
+        debugPrint("Отправка запроса: ${options.method} ${options.baseUrl}${options.path}");
+        return handler.next(options);
+      },
+      onResponse: (response, handler) {
+        debugPrint("Получен ответ: ${response.statusCode} от ${response.requestOptions.path}");
+        return handler.next(response);
+      },
+      onError: (error, handler) {
+        debugPrint("Ошибка запроса: ${error.response?.statusCode} ${error.message} от ${error.requestOptions.path}");
+        return handler.next(error);
+      },
+    ));
   }
 
   Future<List<Comic>> getAllComics() async {
     try {
-      final response = await _dio.get("${Environment.API_URL}/comics/");
+      // Явно добавляем слеш в конце URL согласно документации
+      final response = await _dio.get("/comics/");
       debugPrint("Получен ответ от сервера: ${response.statusCode}");
 
       if (response.statusCode! >= 200 && response.statusCode! < 300 && response.data is List) {
@@ -55,8 +83,9 @@ class ComicApi {
         ),
       });
 
+      // Явно добавляем слеш в конце URL согласно документации
       final response = await _dio.post(
-        "${Environment.API_URL}/comics/$id/cover/",
+        "/comics/$id/cover/",
         data: formData,
       );
 
@@ -79,8 +108,9 @@ class ComicApi {
         "cover_image_path": "",
       };
 
+      // Явно добавляем слеш в конце URL согласно документации
       final response = await _dio.post(
-        "${Environment.API_URL}/comics/",
+        "/comics/",
         data: jsonEncode(data),
         options: Options(
           headers: {

@@ -9,6 +9,7 @@ import '../../data/models/comic_model.dart';
 import '../../ui/comic/canvas/canvas_controller.dart';
 import '../image/image_provider.dart' as img_provider;
 import 'package:dio/dio.dart';
+import 'package:http/http.dart' as http;
 
 import '../../../config/environment.dart';
 
@@ -281,12 +282,42 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
   final Ref _ref;
 
   ComicEditorNotifier(this._ref) : super(EditorState()) {
-    _dio.options.baseUrl = Environment.API_URL;
+    _initDio();
+  }
+
+  // Инициализация Dio с правильной обработкой URL
+  void _initDio() {
+    String baseUrl = Environment.API_URL;
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    }
+
+    _dio.options.baseUrl = baseUrl;
     _dio.options.followRedirects = true;
     _dio.options.maxRedirects = 5;
     _dio.options.validateStatus = (status) {
       return status! < 500; // Принимать коды ответа до 500
     };
+
+    // Добавляем интерцептор для обеспечения наличия слеша в конце URL
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        // Убеждаемся, что URL заканчивается на "/", если это не запрос на загрузку файла
+        if (!options.path.endsWith('/') && !options.path.contains('upload')) {
+          options.path = "${options.path}/";
+        }
+        print("Отправка запроса: ${options.method} ${options.baseUrl}${options.path}");
+        return handler.next(options);
+      },
+      onResponse: (response, handler) {
+        print("Получен ответ: ${response.statusCode} от ${response.requestOptions.path}");
+        return handler.next(response);
+      },
+      onError: (error, handler) {
+        print("Ошибка запроса: ${error.response?.statusCode} ${error.message} от ${error.requestOptions.path}");
+        return handler.next(error);
+      },
+    ));
   }
 
   // Сброс состояния редактора
@@ -506,7 +537,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
           if (errorMsg.contains('страница с таким номером уже существует')) {
 
             // Попробуем получить все страницы комикса и установить найденную
-            await           _reloadAndSetExistingPage(pageNumber);
+            await _reloadAndSetExistingPage(pageNumber);
           }
         } else {
           throw Exception("Ошибка создания страницы: ${response.statusCode} ${response.data}");
@@ -648,6 +679,11 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
   // Установка текущей страницы
   Future<void> setCurrentPage(int pageId) async {
     print("Установка текущей страницы: $pageId");
+
+    // Сначала сохраняем текущую ячейку перед переключением страницы
+    if (state.currentCell != null) {
+      await saveCurrentCell();
+    }
 
     try {
       // Находим страницу в списке страниц
@@ -828,40 +864,315 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     );
   }
 
-  // Сохранение текущей ячейки на сервере
-  Future<void> saveCurrentCell() async {
+  // Функция, которая создает объект Dio с корректными настройками
+  Dio _createApiClient() {
+    final Dio dio = Dio();
+
+    // Настраиваем базовый URL без завершающего слеша
+    String baseUrl = Environment.API_URL;
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    }
+    dio.options.baseUrl = baseUrl;
+
+    // Важно: разрешаем автоматическое следование перенаправлениям!
+    dio.options.followRedirects = true;
+    dio.options.maxRedirects = 5;
+
+    // Увеличиваем таймауты для стабильной работы
+    dio.options.connectTimeout = const Duration(seconds: 10);
+    dio.options.receiveTimeout = const Duration(seconds: 10);
+    dio.options.sendTimeout = const Duration(seconds: 10);
+
+    // Принимаем коды ответов до 500
+    dio.options.validateStatus = (status) {
+      return status! < 500;
+    };
+
+    // Для отладки HTTP-запросов добавляем логгер
+    dio.interceptors.add(LogInterceptor(
+      requestBody: true,
+      responseBody: true,
+      responseHeader: true,
+      requestHeader: true,
+    ));
+
+    // Добавляем отладочный интерцептор
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        // Убедимся, что URL заканчивается слешем
+        if (!options.path.endsWith('/') && !options.path.contains('upload')) {
+          options.path = "${options.path}/";
+        }
+        print("Отправка запроса: ${options.method} ${options.baseUrl}${options.path}");
+        return handler.next(options);
+      },
+      onResponse: (response, handler) {
+        print("Получен ответ: ${response.statusCode} от ${response.requestOptions.path}");
+        if (response.statusCode == 307) {
+          print("Получено перенаправление. Location: ${response.headers['location']}");
+        }
+        return handler.next(response);
+      },
+      onError: (error, handler) {
+        print("Ошибка запроса: ${error.response?.statusCode} ${error.message} от ${error.requestOptions.path}");
+        if (error.response?.statusCode == 307) {
+          print("Ошибка перенаправления. Location: ${error.response?.headers['location']}");
+        }
+        return handler.next(error);
+      },
+    ));
+
+    return dio;
+  }
+
+  Future<bool> saveCurrentCell() async {
     if (state.currentCell == null) {
       print("Нет текущей ячейки для сохранения");
-      return;
+      return false;
     }
 
     print("Сохранение ячейки: ${state.currentCell!.id}");
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     try {
-      // Обновление ячейки на сервере
-      await _dio.put(
-        '/cells/${state.currentCell!.id}/',
-        data: jsonEncode(state.currentCell!.toJson()),
-        options: Options(
-          headers: {
-            "Content-Type": "application/json",
-          },
-        ),
-      );
+      // Получаем базовый URL без слеша в конце
+      String baseUrl = Environment.API_URL;
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
 
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: null,
-      );
-      print("Ячейка сохранена успешно");
+      // Получаем только домен (https://example.com)
+      String domain = baseUrl.split('/').sublist(0, 3).join('/');
+
+      // Формируем URL точно в том формате, который требует сервер (БЕЗ слеша в конце)
+      final String url = "$baseUrl/cells/${state.currentCell!.id}";
+      print("Отправка запроса на URL (без слеша в конце): $url");
+
+      // Подготавливаем данные для отправки
+      final Map<String, dynamic> cellData = {
+        'position_x': state.currentCell!.positionX,
+        'position_y': state.currentCell!.positionY,
+        'width': state.currentCell!.width,
+        'height': state.currentCell!.height,
+        'z_index': state.currentCell!.zIndex,
+        'content_json': state.currentCell!.contentJson,
+      };
+
+      // Создаем HTTP клиент напрямую, чтобы избежать проблем с Dio и перенаправлениями
+      final client = http.Client();
+
+      try {
+        // Используем HTTP напрямую без библиотек с автоматическим перенаправлением
+        final response = await client.put(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(cellData),
+        );
+
+        print("Получен ответ: ${response.statusCode}");
+        print("Заголовки ответа: ${response.headers}");
+
+        // Проверяем статус ответа
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          print("Ячейка сохранена успешно: ${response.statusCode}");
+
+          // Запрашиваем обновленную ячейку с сервера
+          await _refreshCurrentCell();
+
+          state = state.copyWith(
+            isLoading: false,
+            errorMessage: null,
+          );
+
+          return true;
+        }
+        // Если это не успешный ответ, но и не перенаправление
+        else if (response.statusCode != 301 && response.statusCode != 302 &&
+            response.statusCode != 307 && response.statusCode != 308) {
+          throw Exception("Ошибка сохранения ячейки: ${response.statusCode}, ${response.body}");
+        }
+        // Обрабатываем перенаправление только один раз
+        else {
+          final String? redirectUrl = response.headers['location'];
+          print("Получено перенаправление на: $redirectUrl");
+
+          if (redirectUrl != null && redirectUrl.isNotEmpty) {
+            // Важно! Не добавляем слеш в конце, если его нет в заголовке Location
+            String fullRedirectUrl;
+
+            if (redirectUrl.startsWith('http')) {
+              // Абсолютный URL
+              fullRedirectUrl = redirectUrl;
+            } else {
+              // Относительный URL
+              String cleanRedirectUrl = redirectUrl.startsWith('/')
+                  ? redirectUrl.substring(1)
+                  : redirectUrl;
+              fullRedirectUrl = "$domain/$cleanRedirectUrl";
+            }
+
+            print("Отправка запроса на перенаправленный URL: $fullRedirectUrl");
+
+            // Выполняем запрос по URL перенаправления без модификаций
+            final redirectResponse = await client.put(
+              Uri.parse(fullRedirectUrl),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(cellData),
+            );
+
+            print("Получен ответ после перенаправления: ${redirectResponse.statusCode}");
+
+            if (redirectResponse.statusCode >= 200 && redirectResponse.statusCode < 300) {
+              print("Ячейка сохранена успешно после перенаправления: ${redirectResponse.statusCode}");
+
+              // Запрашиваем обновленную ячейку с сервера
+              await _refreshCurrentCell();
+
+              state = state.copyWith(
+                isLoading: false,
+                errorMessage: null,
+              );
+
+              return true;
+            } else {
+              throw Exception("Ошибка сохранения ячейки после перенаправления: ${redirectResponse.statusCode}, ${redirectResponse.body}");
+            }
+          }
+        }
+
+        throw Exception("Неожиданное поведение при сохранении ячейки");
+      } finally {
+        // Закрываем HTTP клиент
+        client.close();
+      }
     } catch (e) {
       print("ОШИБКА при сохранении ячейки: $e");
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Ошибка сохранения ячейки: ${e.toString()}',
       );
+      return false;
     }
+  }
+
+  // Обновление текущей ячейки с сервера
+  Future<void> _refreshCurrentCell() async {
+    if (state.currentCell == null) return;
+
+    try {
+      // Получаем базовый URL без слеша в конце
+      String baseUrl = Environment.API_URL;
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+
+      // Получаем только домен
+      String domain = baseUrl.split('/').sublist(0, 3).join('/');
+
+      // Формируем URL БЕЗ слеша в конце, как ожидает сервер
+      final String url = "$baseUrl/cells/${state.currentCell!.id}";
+      print("Получение обновленной ячейки с URL: $url");
+
+      // Используем HTTP клиент без автоматических перенаправлений
+      final client = http.Client();
+      try {
+        final response = await client.get(Uri.parse(url));
+
+        print("Статус ответа при получении ячейки: ${response.statusCode}");
+
+        // Обрабатываем успешный ответ
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          final Map<String, dynamic> cellData = jsonDecode(response.body);
+          final updatedCell = Cell.fromJson(cellData);
+
+          // Обновляем ячейку в состоянии
+          _updateCellInState(updatedCell);
+
+          print("Ячейка успешно обновлена с сервера");
+          return;
+        }
+        // Если это не успешный ответ, но и не перенаправление
+        else if (response.statusCode != 301 && response.statusCode != 302 &&
+            response.statusCode != 307 && response.statusCode != 308) {
+          print("Ошибка при обновлении ячейки с сервера: ${response.statusCode}, ${response.body}");
+          return;
+        }
+        // Обрабатываем перенаправление
+        else {
+          final String? redirectUrl = response.headers['location'];
+          print("Получено перенаправление на: $redirectUrl");
+
+          if (redirectUrl != null && redirectUrl.isNotEmpty) {
+            // Формируем полный URL для перенаправления
+            String fullRedirectUrl;
+
+            if (redirectUrl.startsWith('http')) {
+              // Абсолютный URL
+              fullRedirectUrl = redirectUrl;
+            } else {
+              // Относительный URL
+              String cleanRedirectUrl = redirectUrl.startsWith('/')
+                  ? redirectUrl.substring(1)
+                  : redirectUrl;
+              fullRedirectUrl = "$domain/$cleanRedirectUrl";
+            }
+
+            print("Получение ячейки с перенаправленного URL: $fullRedirectUrl");
+
+            // Выполняем запрос по URL перенаправления
+            final redirectResponse = await client.get(Uri.parse(fullRedirectUrl));
+
+            if (redirectResponse.statusCode >= 200 && redirectResponse.statusCode < 300) {
+              final Map<String, dynamic> cellData = jsonDecode(redirectResponse.body);
+              final updatedCell = Cell.fromJson(cellData);
+
+              // Обновляем ячейку в состоянии
+              _updateCellInState(updatedCell);
+
+              print("Ячейка успешно обновлена с сервера после перенаправления");
+              return;
+            } else {
+              print("Ошибка при обновлении ячейки с сервера после перенаправления: ${redirectResponse.statusCode}, ${redirectResponse.body}");
+              return;
+            }
+          }
+        }
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      print("Ошибка при обновлении ячейки с сервера: $e");
+    }
+  }
+
+// Вспомогательный метод для обновления ячейки в состоянии (остается без изменений)
+  void _updateCellInState(Cell updatedCell) {
+    final updatedPages = state.pages.map((page) {
+      if (page.id == state.currentPageId) {
+        final updatedCells = page.cells.map((cell) {
+          if (cell.id == updatedCell.id) {
+            return updatedCell;
+          }
+          return cell;
+        }).toList();
+
+        return Page(
+          id: page.id,
+          comicId: page.comicId,
+          pageNumber: page.pageNumber,
+          createdAt: page.createdAt,
+          updatedAt: page.updatedAt,
+          cells: updatedCells,
+        );
+      }
+      return page;
+    }).toList();
+
+    state = state.copyWith(
+      pages: updatedPages,
+      currentCell: updatedCell,
+    );
   }
 
   // Установка текущего инструмента

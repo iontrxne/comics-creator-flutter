@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'canvas_controller.dart';
@@ -80,9 +81,27 @@ class ComicCanvasState extends State<ComicCanvas> {
     // Явно очищаем старый контроллер перед созданием нового
     _controller = null;
 
+    // Проверяем валидность JSON
+    String initialContentJson = widget.currentCell.contentJson;
+    if (initialContentJson.isEmpty) {
+      initialContentJson = '{"elements":[]}';
+    } else {
+      try {
+        // Проверка валидности JSON
+        final json = jsonDecode(initialContentJson);
+        if (!json.containsKey('elements')) {
+          initialContentJson = '{"elements":[]}';
+          print("JSON не содержит ключа 'elements', используем пустой JSON");
+        }
+      } catch (e) {
+        initialContentJson = '{"elements":[]}';
+        print("Невалидный JSON: $e, используем пустой JSON");
+      }
+    }
+
     try {
       _controller = CanvasController(
-        initialContentJson: widget.currentCell.contentJson,
+        initialContentJson: initialContentJson,
         onContentChanged: (content) {
           _lastContent = content;
           widget.onContentChanged(content);

@@ -327,7 +327,14 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
             return GestureDetector(
               onTap: () {
                 print("Нажата кнопка добавления страницы в селекторе");
-                ref.read(comicEditorProvider.notifier).addPage();
+                // Сначала сохраняем текущую ячейку, затем добавляем новую страницу
+                if (state.currentCell != null) {
+                  ref.read(comicEditorProvider.notifier).saveCurrentCell().then((_) {
+                    ref.read(comicEditorProvider.notifier).addPage();
+                  });
+                } else {
+                  ref.read(comicEditorProvider.notifier).addPage();
+                }
               },
               child: Container(
                 width: 50,
@@ -348,11 +355,12 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
           return GestureDetector(
             onTap: () {
               print("Выбрана страница ${state.pages[index].pageNumber}");
+              // Сначала сохраняем текущую ячейку, затем меняем страницу
               setState(() {
                 _canvasKey = UniqueKey(); // Обновляем ключ при смене страницы
               });
-              ref.read(comicEditorProvider.notifier)
-                  .setCurrentPage(state.pages[index].id ?? 0);
+              // Автоматически сохраняем текущую ячейку при переключении страницы
+              ref.read(comicEditorProvider.notifier).setCurrentPage(state.pages[index].id ?? 0);
             },
             child: Container(
               width: 50,
