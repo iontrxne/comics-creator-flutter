@@ -1,3 +1,4 @@
+// lib/src/ui/comic/create_comics_form.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,8 +14,9 @@ import '../../logic/image/image_provider.dart';
 class CreateComicForm extends ConsumerStatefulWidget {
   final String? title;
   final bool? isEdit;
+  final int? comicId;
 
-  const CreateComicForm({this.title, this.isEdit, super.key});
+  const CreateComicForm({this.title, this.isEdit, this.comicId, super.key});
 
   @override
   _CreateComicFormState createState() => _CreateComicFormState();
@@ -31,11 +33,9 @@ class _CreateComicFormState extends ConsumerState<CreateComicForm> {
 
   @override
   Widget build(BuildContext context) {
-
-
     return Scaffold(
         appBar: AppBar(
-          title: Text(widget.title != null ? widget.title  ?? 'Неизвестное название' : 'Создай новый комикс!'),
+          title: Text(widget.isEdit == true ? 'Редактировать комикс' : 'Создать новый комикс!'),
           centerTitle: true,
           backgroundColor: Palette.orangeDark,
         ),
@@ -153,72 +153,90 @@ class _CreateComicFormState extends ConsumerState<CreateComicForm> {
                 const SizedBox(height: 16),
                 if (widget.isEdit == null || widget.isEdit == false)
                   ElevatedButton(
-                  onPressed: () async {
-                    if (titleController.text.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Введи название комикса!',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          backgroundColor: Colors.black,
-                        ),
-                      );
-                      return;
-                    }
-
-                    // Показываем индикатор загрузки
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (context) => const Center(child: LoadingIndicator(
-                        indicatorType: Indicator.ballClipRotateMultiple,
-                        colors: [
-                          Palette.white,
-                        ],
-                        strokeWidth: 3,
-                        backgroundColor: Colors.transparent,
-                        pathBackgroundColor: Colors.black,
-                      ),),
-                    );
-
-                    final imageFile = ref.watch(imageProvider);
-                    try {
-                      final comicId = await ref.read(uploadComicProvider({
-                        'title': titleController.text,
-                      }).future);
-
-                      if (comicId != null) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Комикс успешно создан!'),
-                              backgroundColor: Colors.green,
+                    onPressed: () async {
+                      if (titleController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Введи название комикса!',
+                              style: TextStyle(color: Colors.white),
                             ),
-                          );
-                        }
+                            backgroundColor: Colors.black,
+                          ),
+                        );
+                        return;
+                      }
 
-                        // Загружаем обложку только если она была выбрана
-                        if (imageFile != null) {
-                          await ref.read(uploadComicCoverProvider({
-                            "id": comicId,
-                            "imageFile": imageFile
-                          }).future);
-                        }
+                      // Показываем индикатор загрузки
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const Center(child: LoadingIndicator(
+                          indicatorType: Indicator.ballClipRotateMultiple,
+                          colors: [
+                            Palette.white,
+                          ],
+                          strokeWidth: 3,
+                          backgroundColor: Colors.transparent,
+                          pathBackgroundColor: Colors.black,
+                        ),),
+                      );
 
-                        ref.read(imageProvider.notifier).state = null;
-                        ref.refresh(comicsListProvider);
+                      final imageFile = ref.watch(imageProvider);
+                      try {
+                        final comicId = await ref.read(uploadComicProvider({
+                          'title': titleController.text,
+                        }).future);
 
-                        // Закрываем диалог загрузки
-                        if (context.mounted) {
-                          Navigator.of(context).pop();
-                        }
+                        if (comicId != null) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Комикс успешно создан!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
 
-                        // Возвращаем ID созданного комикса
-                        if (context.mounted) {
-                          Navigator.of(context).pop(comicId);
+                          // Загружаем обложку только если она была выбрана
+                          if (imageFile != null) {
+                            await ref.read(uploadComicCoverProvider({
+                              "id": comicId,
+                              "imageFile": imageFile
+                            }).future);
+                          }
+
+                          ref.read(imageProvider.notifier).state = null;
+                          ref.refresh(comicsListProvider);
+
+                          // Закрываем диалог загрузки
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+
+                          // Возвращаем ID созданного комикса
+                          if (context.mounted) {
+                            Navigator.of(context).pop(comicId);
+                          }
+                        } else {
+                          // Закрываем диалог загрузки
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Не удалось создать комикс',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
                         }
-                      } else {
+                      } catch (e) {
                         // Закрываем диалог загрузки
                         if (context.mounted) {
                           Navigator.of(context).pop();
@@ -226,48 +244,131 @@ class _CreateComicFormState extends ConsumerState<CreateComicForm> {
 
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
-                                'Не удалось создать комикс',
-                                style: TextStyle(color: Colors.white),
+                                'Ошибка: ${e.toString()}',
+                                style: const TextStyle(color: Colors.white),
                               ),
                               backgroundColor: Colors.red,
                             ),
                           );
                         }
                       }
-                    } catch (e) {
-                      // Закрываем диалог загрузки
-                      if (context.mounted) {
-                        Navigator.of(context).pop();
-                      }
-
-                      if (context.mounted) {
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Palette.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text(
+                      'Создать',
+                      style: TextStyle(fontSize: 20, color: Colors.brown),
+                    ),
+                  ),
+                if (widget.isEdit == true && widget.comicId != null)
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (titleController.text.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
+                          const SnackBar(
                             content: Text(
-                              'Ошибка: ${e.toString()}',
-                              style: const TextStyle(color: Colors.white),
+                              'Введи название комикса!',
+                              style: TextStyle(color: Colors.white),
                             ),
-                            backgroundColor: Colors.red,
+                            backgroundColor: Colors.black,
                           ),
                         );
+                        return;
                       }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Palette.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text(
-                    'Создать',
-                    style: TextStyle(fontSize: 20, color: Colors.brown),
-                  ),
-                ),
-                if (widget.isEdit == true)
-                  ElevatedButton(
-                    onPressed: () {
-                      //todo логика обновления
+
+                      // Показываем индикатор загрузки
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const Center(child: LoadingIndicator(
+                          indicatorType: Indicator.ballClipRotateMultiple,
+                          colors: [
+                            Palette.white,
+                          ],
+                          strokeWidth: 3,
+                          backgroundColor: Colors.transparent,
+                          pathBackgroundColor: Colors.black,
+                        ),),
+                      );
+
+                      final imageFile = ref.watch(imageProvider);
+                      try {
+                        // Обновляем заголовок комикса
+                        final success = await ref.read(updateComicProvider({
+                          'id': widget.comicId!,
+                          'title': titleController.text,
+                        }).future);
+
+                        if (success) {
+                          // Если была выбрана новая обложка, обновляем ее
+                          if (imageFile != null) {
+                            await ref.read(uploadComicCoverProvider({
+                              "id": widget.comicId!,
+                              "imageFile": imageFile
+                            }).future);
+                          }
+
+                          ref.read(imageProvider.notifier).state = null;
+                          ref.refresh(comicsListProvider);
+
+                          // Закрываем диалог загрузки
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Комикс успешно обновлен!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+
+                          // Возвращаемся назад
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+                        } else {
+                          // Закрываем диалог загрузки
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Не удалось обновить комикс',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        // Закрываем диалог загрузки
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Ошибка: ${e.toString()}',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Palette.white,
@@ -276,7 +377,8 @@ class _CreateComicFormState extends ConsumerState<CreateComicForm> {
                     child: const Text(
                       'Обновить',
                       style: TextStyle(fontSize: 20, color: Colors.brown),
-                    ),)
+                    ),
+                  )
               ],
             ),
           ),

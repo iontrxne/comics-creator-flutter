@@ -1,9 +1,11 @@
+// lib/src/ui/comic/comic_editor_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:loading_indicator/loading_indicator.dart';
 import '../../../config/palette.dart';
 import '../../logic/comic/editor_provider.dart';
+import '../../logic/comic/comic_provider.dart';
 import 'canvas/comic_canvas.dart';
 import 'canvas/tool_panel.dart';
 import 'create_comics_form.dart';
@@ -72,39 +74,16 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
                   ref.read(comicEditorProvider.notifier).saveCurrentCell();
                   break;
                 case 2:
-                  _canvasKey = UniqueKey(); // Обновляем ключ для пересоздания холста
+                  setState(() {
+                    _canvasKey = UniqueKey(); // Обновляем ключ для пересоздания холста
+                  });
                   break;
-                case 3: //todo удалить комикс
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return AlertDialog(
-                        title: const Text('Подтвердите удаление'),
-                        content: const Text('Вы точно хотите удалить этот комикс?'),
-                        actions: <Widget>[
-                          TextButton(
-                            onPressed: () {
-                              // Закрыть диалог без удаления
-                              Navigator.of(context).pop();
-                            },
-                            child: const Text('Отмена', style: TextStyle(color: Colors.black),),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              // Логика удаления комикса
-                              // Здесь нужно добавить код для удаления комикса
-                              Navigator.of(context).pop();
-                            },
-                            child: const Text('Удалить', style: TextStyle(color: Colors.red),),
-                          ),
-                        ],
-                      );
-                    },
-                  );
+                case 3: // Удалить комикс
+                  _showDeleteComicDialog();
                   break;
-                case 4:
+                case 4: // Редактировать название комикса
                   Navigator.of(context).push<int?>(
-                      MaterialPageRoute(builder: (c) => CreateComicForm(title: widget.comicTitle, isEdit: true,)));
+                      MaterialPageRoute(builder: (c) => CreateComicForm(title: widget.comicTitle, isEdit: true, comicId: widget.comicId)));
                   break;
                 default:
                   break;
@@ -135,9 +114,9 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
                 value: 3,
                 child: Row(
                   children: [
-                    Icon(Icons.delete_forever, color: Palette.black,),
+                    Icon(Icons.delete_forever, color: Colors.red,),
                     SizedBox(width: 8),
-                    Text('Удалить комикс'),
+                    Text('Удалить комикс', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -205,20 +184,44 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
                 color: Colors.black45,
                 padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Комикс: ${widget.comicId}',
-                      style: const TextStyle(color: Colors.white),
+                    Row(
+                      children: [
+                        Text(
+                          'Комикс: ${widget.comicId}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Страница: ${editorState.currentPageId}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Ячейка: ${editorState.currentCell?.id ?? "Нет"}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Страница: ${editorState.currentPageId}',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Ячейка: ${editorState.currentCell?.id ?? "Нет"}',
-                      style: const TextStyle(color: Colors.white),
+                    // Кнопки для удаления текущей страницы или ячейки
+                    Row(
+                      children: [
+                        // Удалить текущую ячейку
+                        if (editorState.currentCell != null)
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.white),
+                            tooltip: 'Удалить текущую ячейку',
+                            onPressed: () => _showDeleteCellDialog(editorState.currentCell!.id!),
+                          ),
+                        // Удалить текущую страницу
+                        if (editorState.currentPageId != null)
+                          IconButton(
+                            icon: const Icon(Icons.delete_sweep, color: Colors.white),
+                            tooltip: 'Удалить текущую страницу',
+                            onPressed: () => _showDeletePageDialog(editorState.currentPageId!),
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -244,15 +247,15 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
             Expanded(
               child: editorState.isLoading
                   ? const Center(
-                    child: LoadingIndicator(
-                      indicatorType: Indicator.ballClipRotateMultiple,
-                      colors: [
-                        Palette.white,
-                      ],
-                      strokeWidth: 3,
-                      backgroundColor: Colors.transparent,
-                      pathBackgroundColor: Colors.black,
-                      ))
+                  child: LoadingIndicator(
+                    indicatorType: Indicator.ballClipRotateMultiple,
+                    colors: [
+                      Palette.white,
+                    ],
+                    strokeWidth: 3,
+                    backgroundColor: Colors.transparent,
+                    pathBackgroundColor: Colors.black,
+                  ))
                   : editorState.pages.isEmpty
                   ? _buildEmptyState()
                   : editorState.currentCell == null
@@ -294,6 +297,164 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
       }
     });
     super.dispose();
+  }
+
+  // Диалог удаления комикса
+  void _showDeleteComicDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Подтвердите удаление'),
+          content: const Text('Вы точно хотите удалить этот комикс?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                // Закрыть диалог без удаления
+                Navigator.of(context).pop();
+              },
+              child: const Text('Отмена', style: TextStyle(color: Colors.black),),
+            ),
+            TextButton(
+              onPressed: () async {
+                // Закрываем диалог
+                Navigator.of(context).pop();
+
+                // Показываем индикатор загрузки
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: LoadingIndicator(
+                      indicatorType: Indicator.ballClipRotateMultiple,
+                      colors: [Palette.white],
+                      strokeWidth: 3,
+                      backgroundColor: Colors.transparent,
+                      pathBackgroundColor: Colors.black,
+                    ),
+                  ),
+                );
+
+                try {
+                  // Удаляем комикс
+                  final success = await ref.read(deleteComicProvider(widget.comicId).future);
+
+                  // Закрываем индикатор загрузки
+                  if (context.mounted) Navigator.of(context).pop();
+
+                  if (success) {
+                    // Показываем сообщение об успехе
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Комикс успешно удален'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+
+                    // Возвращаемся на главный экран
+                    if (context.mounted) {
+                      // Обновляем список комиксов перед возвратом
+                      ref.refresh(comicsListProvider);
+                      Navigator.of(context).pop();
+                    }
+                  } else {
+                    // Показываем сообщение об ошибке
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Не удалось удалить комикс'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  // Закрываем индикатор загрузки в случае ошибки
+                  if (context.mounted) Navigator.of(context).pop();
+
+                  // Показываем сообщение об ошибке
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Ошибка: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Удалить', style: TextStyle(color: Colors.red),),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Диалог удаления страницы
+  void _showDeletePageDialog(int pageId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Подтвердите удаление'),
+          content: const Text('Вы точно хотите удалить эту страницу?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                // Закрыть диалог без удаления
+                Navigator.of(context).pop();
+              },
+              child: const Text('Отмена', style: TextStyle(color: Colors.black),),
+            ),
+            TextButton(
+              onPressed: () {
+                // Закрываем диалог
+                Navigator.of(context).pop();
+
+                // Удаляем страницу
+                ref.read(comicEditorProvider.notifier).deletePage(pageId);
+              },
+              child: const Text('Удалить', style: TextStyle(color: Colors.red),),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Диалог удаления ячейки
+  void _showDeleteCellDialog(int cellId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Подтвердите удаление'),
+          content: const Text('Вы точно хотите удалить эту ячейку?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                // Закрыть диалог без удаления
+                Navigator.of(context).pop();
+              },
+              child: const Text('Отмена', style: TextStyle(color: Colors.black),),
+            ),
+            TextButton(
+              onPressed: () {
+                // Закрываем диалог
+                Navigator.of(context).pop();
+
+                // Удаляем ячейку
+                ref.read(comicEditorProvider.notifier).deleteCell(cellId);
+              },
+              child: const Text('Удалить', style: TextStyle(color: Colors.red),),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildEmptyState() {

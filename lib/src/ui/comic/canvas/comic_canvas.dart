@@ -1,3 +1,4 @@
+// lib/src/ui/comic/canvas/comic_canvas.dart
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -162,9 +163,13 @@ class ComicCanvasState extends State<ComicCanvas> {
                     cell: widget.currentCell,
                     content: _controller!.content,
                     currentPoints: _lastPosition != null &&
-                        widget.tool == DrawingTool.brush
+                        (widget.tool == DrawingTool.brush ||
+                            widget.tool == DrawingTool.pencil ||
+                            widget.tool == DrawingTool.marker)
                         ? [Point(_lastPosition!.dx, _lastPosition!.dy)]
                         : [],
+                    currentTool: widget.tool,
+                    eraserSize: widget.thickness,
                   ),
                   child: Container(
                     width: widget.currentCell.width,
@@ -226,7 +231,13 @@ class ComicCanvasState extends State<ComicCanvas> {
 
     if (_controller == null) return;
 
-    if (widget.tool == DrawingTool.brush) {
+    if (widget.tool == DrawingTool.brush ||
+        widget.tool == DrawingTool.pencil ||
+        widget.tool == DrawingTool.marker) {
+      final localPosition = _transformPosition(details.localFocalPoint);
+      _lastPosition = localPosition;
+      _controller!.startDrawing(localPosition);
+    } else if (widget.tool == DrawingTool.eraser) {
       final localPosition = _transformPosition(details.localFocalPoint);
       _lastPosition = localPosition;
       _controller!.startDrawing(localPosition);
@@ -236,6 +247,9 @@ class ComicCanvasState extends State<ComicCanvas> {
     } else if (widget.tool == DrawingTool.hand) {
       // Ничего не делаем, просто запоминаем начальную позицию
     } else if (widget.tool == DrawingTool.selection) {
+      final localPosition = _transformPosition(details.localFocalPoint);
+      _controller!.startDrawing(localPosition);
+    } else if (widget.tool == DrawingTool.fill) {
       final localPosition = _transformPosition(details.localFocalPoint);
       _controller!.startDrawing(localPosition);
     }
@@ -250,8 +264,17 @@ class ComicCanvasState extends State<ComicCanvas> {
         _offset += details.focalPoint - _lastFocalPoint!;
         _lastFocalPoint = details.focalPoint;
       });
-    } else if (widget.tool == DrawingTool.brush) {
+    } else if (widget.tool == DrawingTool.brush ||
+        widget.tool == DrawingTool.pencil ||
+        widget.tool == DrawingTool.marker) {
       // Рисование
+      final localPosition = _transformPosition(details.localFocalPoint);
+      setState(() {
+        _lastPosition = localPosition;
+      });
+      _controller!.continueDrawing(localPosition);
+    } else if (widget.tool == DrawingTool.eraser) {
+      // Стирание
       final localPosition = _transformPosition(details.localFocalPoint);
       setState(() {
         _lastPosition = localPosition;
@@ -278,7 +301,10 @@ class ComicCanvasState extends State<ComicCanvas> {
   void _handleScaleEnd(ScaleEndDetails details) {
     if (_controller == null) return;
 
-    if (widget.tool == DrawingTool.brush) {
+    if (widget.tool == DrawingTool.brush ||
+        widget.tool == DrawingTool.pencil ||
+        widget.tool == DrawingTool.marker ||
+        widget.tool == DrawingTool.eraser) {
       _controller!.endDrawing();
       setState(() {
         _lastPosition = null;
@@ -393,6 +419,10 @@ class ComicCanvasState extends State<ComicCanvas> {
     switch (tool) {
       case DrawingTool.brush:
         return 'Кисть';
+      case DrawingTool.pencil:
+        return 'Карандаш';
+      case DrawingTool.marker:
+        return 'Маркер';
       case DrawingTool.eraser:
         return 'Ластик';
       case DrawingTool.text:
@@ -403,6 +433,8 @@ class ComicCanvasState extends State<ComicCanvas> {
         return 'Выбор';
       case DrawingTool.hand:
         return 'Рука';
+      case DrawingTool.fill:
+        return 'Заливка';
       default:
         return 'Неизвестно';
     }
@@ -414,11 +446,15 @@ class CanvasPainter extends CustomPainter {
   final Cell cell;
   final CellContent content;
   final List<Point> currentPoints;
+  final DrawingTool currentTool;
+  final double eraserSize;
 
   CanvasPainter({
     required this.cell,
     required this.content,
     this.currentPoints = const [],
+    this.currentTool = DrawingTool.brush,
+    this.eraserSize = 3.0,
   });
 
   @override
@@ -438,23 +474,49 @@ class CanvasPainter extends CustomPainter {
         // Изображения отрисовываются в виджете
       } else if (element is RectangleElement) {
         _drawRectangle(canvas, element);
+      } else if (element is FillElement) {
+        _drawFill(canvas, element);
       }
     }
 
     // Отрисовка текущей линии рисования
     if (currentPoints.isNotEmpty) {
-      final paint = Paint()
-        ..color = Colors.black
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
+      if (currentTool == DrawingTool.eraser) {
+        // Отображение ластика как круга
+        final eraserPaint = Paint()
+          ..color = Colors.red.withOpacity(0.3)
+          ..style = PaintingStyle.fill;
 
-      for (int i = 0; i < currentPoints.length - 1; i++) {
-        canvas.drawLine(
-          Offset(currentPoints[i].x, currentPoints[i].y),
-          Offset(currentPoints[i + 1].x, currentPoints[i + 1].y),
-          paint,
+        canvas.drawCircle(
+            Offset(currentPoints.last.x, currentPoints.last.y),
+            eraserSize,
+            eraserPaint
         );
+      } else {
+        // Цвет и толщина в зависимости от инструмента
+        Color brushColor = Colors.black;
+        double strokeWidth = 3.0;
+
+        if (currentTool == DrawingTool.pencil) {
+          strokeWidth = 1.5;
+        } else if (currentTool == DrawingTool.marker) {
+          brushColor = Colors.black.withOpacity(0.5);
+          strokeWidth = 5.0;
+        }
+
+        final paint = Paint()
+          ..color = brushColor
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke;
+
+        for (int i = 0; i < currentPoints.length - 1; i++) {
+          canvas.drawLine(
+            Offset(currentPoints[i].x, currentPoints[i].y),
+            Offset(currentPoints[i + 1].x, currentPoints[i + 1].y),
+            paint,
+          );
+        }
       }
     }
   }
@@ -462,11 +524,21 @@ class CanvasPainter extends CustomPainter {
   void _drawBrush(Canvas canvas, BrushElement element) {
     if (element.points.length < 2) return;
 
+    final Color color = Color(int.parse(element.color.substring(1), radix: 16) + 0xFF000000);
     final paint = Paint()
-      ..color = Color(int.parse(element.color.substring(1), radix: 16) + 0xFF000000)
+      ..color = color
       ..strokeWidth = element.thickness
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
+
+    // Разные настройки для разных типов кисти
+    if (element.brushType == 'pencil') {
+      paint.strokeWidth = element.thickness * 0.7;
+      paint.strokeCap = StrokeCap.square;
+    } else if (element.brushType == 'marker') {
+      paint.strokeWidth = element.thickness * 1.5;
+      // Маркер уже имеет прозрачность в самом цвете
+    }
 
     for (int i = 0; i < element.points.length - 1; i++) {
       canvas.drawLine(
@@ -525,10 +597,24 @@ class CanvasPainter extends CustomPainter {
     canvas.drawRect(rect, strokePaint);
   }
 
+  void _drawFill(Canvas canvas, FillElement element) {
+    // Заливка реализована как прямоугольник размером с весь холст
+    final fillPaint = Paint()
+      ..color = Color(int.parse(element.color.substring(1), radix: 16) + 0xFF000000)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRect(
+        Rect.fromLTWH(0, 0, cell.width, cell.height),
+        fillPaint
+    );
+  }
+
   @override
   bool shouldRepaint(covariant CanvasPainter oldDelegate) {
     return oldDelegate.content != content ||
         oldDelegate.currentPoints != currentPoints ||
+        oldDelegate.currentTool != currentTool ||
+        oldDelegate.eraserSize != eraserSize ||
         oldDelegate.cell.id != cell.id;
   }
 }

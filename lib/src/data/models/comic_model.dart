@@ -1,3 +1,4 @@
+// lib/src/data/models/comic_model.dart
 class Comic {
   int? id;
   String? title;
@@ -18,10 +19,7 @@ class Comic {
     String? coverPath = json["cover_image_path"];
 
     // Отфильтровываем некорректные пути обложки
-    if (coverPath == null ||
-        coverPath.isEmpty ||
-        coverPath == 'example.png' ||
-        !(coverPath.startsWith('uploads/covers/') || coverPath.startsWith('uploads/images/'))) {
+    if (coverPath == null || coverPath.isEmpty) {
       coverPath = '';
     }
 
@@ -36,5 +34,16 @@ class Comic {
           ? DateTime.parse(json["updated_at"])
           : null,
     );
+  }
+
+  // Преобразование в Map для сохранения в базу данных
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'cover_image_path': coverImagePath,
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+    };
   }
 }

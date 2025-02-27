@@ -1,9 +1,9 @@
+// lib/src/ui/home/home_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animation_plus/animations/pulsing_animation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:loading_indicator/loading_indicator.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../../config/environment.dart';
 import '../../../config/palette.dart';
 import '../../data/models/comic_model.dart';
 import '../../logic/comic/comic_provider.dart';
@@ -14,13 +14,11 @@ import '../comic/comic_editor_page.dart';
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
-  String _formatDate(String isoDate) {
-    try {
-      DateTime dateTime = DateTime.parse(isoDate);
-      return DateFormat('dd.MM.yyyy HH:mm').format(dateTime);
-    } catch (e) {
+  String _formatDate(DateTime? dateTime) {
+    if (dateTime == null) {
       return DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
     }
+    return DateFormat('dd.MM.yyyy HH:mm').format(dateTime);
   }
 
   @override
@@ -70,7 +68,10 @@ class HomePage extends ConsumerWidget {
                                                 comicTitle: comics[index].title ?? 'Без названия',
                                               ),
                                             ),
-                                          );
+                                          ).then((_) {
+                                            // Обновляем список комиксов после возврата
+                                            ref.refresh(comicsListProvider);
+                                          });
                                         },
                                         child: Card(
                                           margin: const EdgeInsets.all(8.0),
@@ -89,7 +90,7 @@ class HomePage extends ConsumerWidget {
                                                           comics[index].title ?? 'Без названия',
                                                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                                                       Text(
-                                                        _formatDate(comics[index].updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String()),
+                                                        _formatDate(comics[index].updatedAt),
                                                         style: const TextStyle(fontSize: 14),
                                                       ),
                                                     ],
@@ -180,19 +181,19 @@ class HomePage extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(12)),
                 child: Container(
                   padding: const EdgeInsets.all(16.0),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.error_outline,
                         color: Colors.red,
                         size: 30,
                       ),
-                      SizedBox(width: 12),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          "Произошла ошибка :(",
-                          style: TextStyle(
+                          "Произошла ошибка: ${error.toString()}",
+                          style: const TextStyle(
                             color: Colors.red,
                             fontSize: 16,
                           ),
@@ -209,51 +210,32 @@ class HomePage extends ConsumerWidget {
         ));
   }
 
-  // Новый метод для обработки отображения обложки комикса
+  // Метод для отображения обложки комикса
   Widget _buildComicCover(Comic comic) {
     // Проверяем наличие обложки
     if (comic.coverImagePath == null || comic.coverImagePath!.isEmpty) {
       return _buildNoCoverPlaceholder("У этого комикса пока что нет обложки");
     }
 
-    // Проверяем валидность пути обложки
-    final imagePath = comic.coverImagePath!;
-    if (imagePath == 'example.png' || !_isValidImagePath(imagePath)) {
-      return _buildNoCoverPlaceholder("У этого комикса пока что нет обложки");
+    // Проверяем, существует ли файл
+    final coverFile = File(comic.coverImagePath!);
+    if (!coverFile.existsSync()) {
+      return _buildNoCoverPlaceholder("Файл обложки не найден");
     }
 
-    // Формируем полный URL для обложки
-    final imageUrl = "${Environment.API_URL}/images/$imagePath";
-
-    return CachedNetworkImage(
-      imageUrl: imageUrl,
-      cacheKey: '${comic.id}_$imagePath',
-      imageBuilder: (context, imageProvider) =>
-          Container(
-              width: double.infinity,
-              height: 300,
-              decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12)),
-                  image: DecorationImage(
-                      image: imageProvider,
-                      fit: BoxFit.cover))),
-      placeholder: (context, url) =>
-      const Center(
-          child: SizedBox(
-              width: 200,
-              height: 200,
-              child: LoadingIndicator(
-                  indicatorType: Indicator.ballClipRotateMultiple,
-                  colors: [
-                    Palette.orangeAccent,
-                  ],
-                  strokeWidth: 3,
-                  backgroundColor: Colors.transparent,
-                  pathBackgroundColor: Colors.black))),
-      errorWidget: (context, url, error) =>
-          _buildNoCoverPlaceholder("Не удалось загрузить изображение"),
+    return Container(
+      width: double.infinity,
+      height: 300,
+      decoration: BoxDecoration(
+          borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(12),
+              topRight: Radius.circular(12)
+          ),
+          image: DecorationImage(
+              image: FileImage(coverFile),
+              fit: BoxFit.cover
+          )
+      ),
     );
   }
 
@@ -280,13 +262,6 @@ class HomePage extends ConsumerWidget {
           )
       ),
     );
-  }
-
-  // Проверка валидности пути изображения
-  bool _isValidImagePath(String path) {
-    return path.isNotEmpty &&
-        path != 'example.png' &&
-        (path.startsWith('uploads/covers/') || path.startsWith('uploads/images/'));
   }
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {

@@ -1,15 +1,18 @@
+// lib/src/ui/comic/canvas/canvas_controller.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 
+// Перечисление инструментов рисования
 enum DrawingTool {
-  brush, // Кисть для рисования
-  eraser, // Ластик
-  text, // Текст
-  image, // Изображение
+  brush,    // Кисть для рисования
+  pencil,   // Карандаш (тоньше и точнее кисти)
+  marker,   // Маркер (толще и полупрозрачный)
+  eraser,   // Ластик
+  text,     // Текст
+  image,    // Изображение
   selection, // Выбор элемента
-  hand, // Перемещение холста
-  fill, // Заливка
-  marker, // Маркер
+  hand,     // Перемещение холста
+  fill,     // Заливка
 }
 
 // Класс для хранения информации о точке на холсте
@@ -34,16 +37,18 @@ abstract class CanvasElement {
   Map<String, dynamic> toJson();
 }
 
-// Класс для линий (кисть)
+// Класс для линий (кисть, карандаш, маркер)
 class BrushElement implements CanvasElement {
   final String color;
   final double thickness;
   final List<Point> points;
+  final String brushType; // 'brush', 'pencil', или 'marker'
 
   BrushElement({
     required this.color,
     required this.thickness,
     required this.points,
+    this.brushType = 'brush',
   });
 
   @override
@@ -55,6 +60,7 @@ class BrushElement implements CanvasElement {
     'color': color,
     'thickness': thickness,
     'points': points.map((p) => p.toJson()).toList(),
+    'brushType': brushType,
   };
 
   factory BrushElement.fromJson(Map<String, dynamic> json) {
@@ -64,6 +70,7 @@ class BrushElement implements CanvasElement {
       points: (json['points'] as List)
           .map((p) => Point.fromJson(p as Map<String, dynamic>))
           .toList(),
+      brushType: json['brushType'] as String? ?? 'brush',
     );
   }
 }
@@ -200,6 +207,38 @@ class RectangleElement implements CanvasElement {
   }
 }
 
+// Класс для заливки
+class FillElement implements CanvasElement {
+  final String color;
+  final double x;
+  final double y;
+
+  FillElement({
+    required this.color,
+    required this.x,
+    required this.y,
+  });
+
+  @override
+  String get type => 'fill';
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'color': color,
+    'x': x,
+    'y': y,
+  };
+
+  factory FillElement.fromJson(Map<String, dynamic> json) {
+    return FillElement(
+      color: json['color'] as String,
+      x: (json['x'] as num).toDouble(),
+      y: (json['y'] as num).toDouble(),
+    );
+  }
+}
+
 // Класс для содержимого ячейки
 class CellContent {
   List<CanvasElement> elements;
@@ -230,6 +269,8 @@ class CellContent {
             return ImageElement.fromJson(data);
           case 'rectangle':
             return RectangleElement.fromJson(data);
+          case 'fill':
+            return FillElement.fromJson(data);
           default:
             throw Exception('Unknown element type: $type');
         }
@@ -279,7 +320,6 @@ class CellContent {
 // Контроллер для работы с холстом
 class CanvasController {
   CellContent _content;
-  // Обновленная сигнатура функции обратного вызова - теперь с двумя параметрами
   final Function(CellContent content, [CellContent? previousContent]) onContentChanged;
 
   // Текущие настройки рисования
@@ -287,12 +327,12 @@ class CanvasController {
   Color currentColor = Colors.black;
   double currentThickness = 3.0;
   double currentFontSize = 16.0;
+  double eraserSize = 15.0; // Размер ластика
 
   // Текущие элементы рисования
   List<Point> _currentPoints = [];
   int? _selectedElementIndex;
 
-  // Конструктор не меняется, но используется обновленная сигнатура функции
   CanvasController({
     required String initialContentJson,
     required this.onContentChanged,
@@ -318,33 +358,69 @@ class CanvasController {
 
   // Обработка начала рисования
   void startDrawing(Offset position) {
-    if (currentTool == DrawingTool.brush) {
+    if (currentTool == DrawingTool.brush ||
+        currentTool == DrawingTool.pencil ||
+        currentTool == DrawingTool.marker) {
       _currentPoints = [Point(position.dx, position.dy)];
+    } else if (currentTool == DrawingTool.eraser) {
+      // Начало стирания
+      _startErasing(position);
     } else if (currentTool == DrawingTool.selection) {
       _selectedElementIndex = _findElementAtPosition(position);
+    } else if (currentTool == DrawingTool.fill) {
+      // Использование заливки
+      _useFillTool(position);
     }
   }
 
   // Обработка продолжения рисования
   void continueDrawing(Offset position) {
-    if (currentTool == DrawingTool.brush) {
+    if (currentTool == DrawingTool.brush ||
+        currentTool == DrawingTool.pencil ||
+        currentTool == DrawingTool.marker) {
       _currentPoints.add(Point(position.dx, position.dy));
+    } else if (currentTool == DrawingTool.eraser) {
+      // Продолжение стирания
+      _continueErasing(position);
     } else if (currentTool == DrawingTool.selection && _selectedElementIndex != null) {
       // Перемещение выбранного элемента
       _moveSelectedElement(position);
     }
   }
 
-  // Обновленный метод endDrawing, с сохранением предыдущего состояния
+  // Обработка окончания рисования
   void endDrawing() {
-    if (currentTool == DrawingTool.brush && _currentPoints.length > 1) {
+    if ((currentTool == DrawingTool.brush ||
+        currentTool == DrawingTool.pencil ||
+        currentTool == DrawingTool.marker) &&
+        _currentPoints.length > 1) {
       // Сохраняем текущее состояние перед изменением
       final previousContent = _content.copy();
 
+      // Устанавливаем разную толщину и прозрачность в зависимости от типа инструмента
+      double toolThickness = currentThickness;
+      String colorHex = '#${currentColor.value.toRadixString(16).substring(2)}';
+      String brushType = 'brush';
+
+      if (currentTool == DrawingTool.pencil) {
+        toolThickness = currentThickness * 0.7; // Тоньше для карандаша
+        brushType = 'pencil';
+      } else if (currentTool == DrawingTool.marker) {
+        toolThickness = currentThickness * 1.5; // Толще для маркера
+        // Добавляем прозрачность для маркера (80% непрозрачности)
+        int alpha = 204; // ~80% от 255
+        int r = currentColor.red;
+        int g = currentColor.green;
+        int b = currentColor.blue;
+        colorHex = '#${alpha.toRadixString(16).padLeft(2, '0')}${r.toRadixString(16).padLeft(2, '0')}${g.toRadixString(16).padLeft(2, '0')}${b.toRadixString(16).padLeft(2, '0')}';
+        brushType = 'marker';
+      }
+
       final element = BrushElement(
-        color: '#${currentColor.value.toRadixString(16).substring(2)}',
-        thickness: currentThickness,
+        color: colorHex,
+        thickness: toolThickness,
         points: _currentPoints,
+        brushType: brushType,
       );
       _content.addElement(element);
 
@@ -354,6 +430,103 @@ class CanvasController {
 
     _currentPoints = [];
     _selectedElementIndex = null;
+  }
+
+  // Начало стирания
+  void _startErasing(Offset position) {
+    // Сохраняем текущее состояние перед стиранием
+    final previousContent = _content.copy();
+
+    // Находим элементы для стирания в этой позиции
+    _eraseAtPosition(position);
+
+    // Уведомляем с предыдущим состоянием
+    notifyContentChanged(previousContent);
+  }
+
+  // Продолжение стирания
+  void _continueErasing(Offset position) {
+    // Для непрерывного стирания не нужно сохранять предыдущее состояние для каждой точки
+    _eraseAtPosition(position);
+    notifyContentChanged();
+  }
+
+  // Стирание в определенной позиции
+  void _eraseAtPosition(Offset position) {
+    // Сохраняем список элементов для удаления
+    List<int> elementsToRemove = [];
+
+    // Проходим по всем элементам и проверяем, находятся ли они под ластиком
+    for (int i = 0; i < _content.elements.length; i++) {
+      final element = _content.elements[i];
+
+      if (element is BrushElement) {
+        // Для мазков кисти проверяем, близка ли любая точка к ластику
+        for (var point in element.points) {
+          if ((position.dx - point.x).abs() < eraserSize &&
+              (position.dy - point.y).abs() < eraserSize) {
+            elementsToRemove.add(i);
+            break;
+          }
+        }
+      } else if (element is TextElement) {
+        // Для текста проверяем, перекрывает ли ластик позицию текста
+        if ((position.dx - element.x).abs() < eraserSize &&
+            (position.dy - element.y).abs() < eraserSize) {
+          elementsToRemove.add(i);
+        }
+      } else if (element is ImageElement) {
+        // Для изображений проверяем, находится ли ластик внутри границ изображения
+        final width = element.width ?? 100;
+        final height = element.height ?? 100;
+
+        if (position.dx >= element.x &&
+            position.dx <= element.x + width &&
+            position.dy >= element.y &&
+            position.dy <= element.y + height) {
+          elementsToRemove.add(i);
+        }
+      } else if (element is RectangleElement) {
+        // Для прямоугольников проверяем, находится ли ластик внутри прямоугольника
+        if (position.dx >= element.x &&
+            position.dx <= element.x + element.width &&
+            position.dy >= element.y &&
+            position.dy <= element.y + element.height) {
+          elementsToRemove.add(i);
+        }
+      } else if (element is FillElement) {
+        // Для элементов заливки проверяем, близок ли ластик к точке заливки
+        if ((position.dx - element.x).abs() < eraserSize &&
+            (position.dy - element.y).abs() < eraserSize) {
+          elementsToRemove.add(i);
+        }
+      }
+    }
+
+    // Удаляем элементы сзади наперед, чтобы избежать проблем со смещением индексов
+    elementsToRemove.sort((a, b) => b.compareTo(a));
+    for (var index in elementsToRemove) {
+      _content.elements.removeAt(index);
+    }
+  }
+
+  // Реализация инструмента заливки
+  void _useFillTool(Offset position) {
+    // Сохраняем текущее состояние перед заливкой
+    final previousContent = _content.copy();
+
+    // Создаем элемент заливки в месте клика
+    final element = FillElement(
+      color: '#${currentColor.value.toRadixString(16).substring(2)}',
+      x: position.dx,
+      y: position.dy,
+    );
+
+    // Добавляем элемент заливки в содержимое
+    _content.addElement(element);
+
+    // Уведомляем с предыдущим состоянием
+    notifyContentChanged(previousContent);
   }
 
   void addText(String text, Offset position) {
@@ -424,6 +597,20 @@ class CanvasController {
             position.dy <= element.y + height) {
           return i;
         }
+      } else if (element is BrushElement) {
+        // Проверяем близость к любой точке мазка кисти
+        for (var point in element.points) {
+          if ((position.dx - point.x).abs() < 10 &&
+              (position.dy - point.y).abs() < 10) {
+            return i;
+          }
+        }
+      } else if (element is FillElement) {
+        // Проверяем близость к точке заливки
+        if ((position.dx - element.x).abs() < 10 &&
+            (position.dy - element.y).abs() < 10) {
+          return i;
+        }
       }
     }
 
@@ -460,6 +647,15 @@ class CanvasController {
       );
       _content.elements[_selectedElementIndex!] = updatedElement;
       notifyContentChanged(previousContent);
+    } else if (element is FillElement) {
+      final updatedElement = FillElement(
+        color: element.color,
+        x: newPosition.dx,
+        y: newPosition.dy,
+      );
+      _content.elements[_selectedElementIndex!] = updatedElement;
+      notifyContentChanged(previousContent);
     }
+    // Для элементов кисти перемещение было бы более сложным
   }
 }
