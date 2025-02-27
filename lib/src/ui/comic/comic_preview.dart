@@ -1,8 +1,10 @@
-// lib/src/ui/comic/comic_preview.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/palette.dart';
 import '../../logic/comic/editor_provider.dart' as editor;
+import '../comic/canvas/canvas_controller.dart';
+import '../comic/canvas/comic_canvas.dart';
 
 /// Виджет для предпросмотра готового комикса
 class ComicPreviewPage extends ConsumerStatefulWidget {
@@ -145,7 +147,7 @@ class _ComicPreviewPageState extends ConsumerState<ComicPreviewPage> {
   }
 
   // Построение предпросмотра страницы
-  Widget _buildPagePreview(editor.Page page) {  // Добавлен префикс editor.
+  Widget _buildPagePreview(editor.Page page) {
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -175,21 +177,50 @@ class _ComicPreviewPageState extends ConsumerState<ComicPreviewPage> {
               child: Container(
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey),
-                  color: Colors.grey.shade100,
                 ),
-                // Здесь нужно отрисовывать содержимое ячейки
-                // Для демонстрации просто показываем номер ячейки
-                child: Center(
-                  child: Text(
-                    'Ячейка ${cell.id}',
-                    style: const TextStyle(color: Colors.black54),
-                  ),
-                ),
+                // Отображаем фактическое содержимое ячейки вместо номера
+                child: _buildCellContent(cell),
               ),
             )),
           ],
         ),
       ),
     );
+  }
+
+  // Новый метод для отображения содержимого ячейки
+  Widget _buildCellContent(editor.Cell cell) {
+    try {
+      // Если JSON пустой или некорректный, показываем заглушку
+      if (cell.contentJson.isEmpty || cell.contentJson == '{"elements":[]}') {
+        return Center(
+          child: Text(
+            'Пустая ячейка ${cell.id}',
+            style: const TextStyle(color: Colors.black54),
+          ),
+        );
+      }
+
+      // Парсим JSON и отображаем содержимое
+      final content = CellContent.fromJsonString(cell.contentJson);
+      return CustomPaint(
+        painter: CanvasPainter(
+          cell: cell,
+          content: content,
+          currentPoints: [],
+          currentTool: DrawingTool.brush,
+          eraserSize: 3.0,
+        ),
+        size: Size(cell.width, cell.height),
+      );
+    } catch (e) {
+      // В случае ошибки показываем сообщение
+      return const Center(
+        child: Text(
+          'Ошибка отображения',
+          style: TextStyle(color: Colors.red),
+        ),
+      );
+    }
   }
 }
