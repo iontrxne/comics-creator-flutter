@@ -1,3 +1,6 @@
+// lib/src/ui/comic/canvas/tool_panel.dart
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../../../config/palette.dart';
 import 'canvas_controller.dart';
@@ -38,7 +41,14 @@ class _ToolPanelState extends State<ToolPanel> {
   void initState() {
     super.initState();
     _selectedColor = widget.currentColor;
-    _currentThickness = widget.currentThickness;
+
+    // Установка корректных начальных значений в зависимости от инструмента
+    if (widget.selectedTool == DrawingTool.eraser) {
+      _currentThickness = math.max(5.0, math.min(widget.currentThickness, 30.0));
+    } else {
+      _currentThickness = math.max(1.0, math.min(widget.currentThickness, 15.0));
+    }
+
     _currentFontSize = widget.currentFontSize;
   }
 
@@ -59,7 +69,7 @@ class _ToolPanelState extends State<ToolPanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 60,
+      height: 70, // Увеличиваем высоту панели
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
         borderRadius: BorderRadius.circular(8),
@@ -69,33 +79,50 @@ class _ToolPanelState extends State<ToolPanel> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildDrawToolsTypeButton(
-            context: context
-          ),
+          _buildDrawToolsTypeButton(context: context),
+          const SizedBox(width: 4), // Добавляем разделители между элементами
           _buildToolButton(
             icon: Icons.text_fields,
             tool: DrawingTool.text,
             tooltip: 'Текст',
           ),
+          const SizedBox(width: 4),
           _buildToolButton(
             icon: Icons.image,
             tool: DrawingTool.image,
             tooltip: 'Изображение',
           ),
+          const SizedBox(width: 4),
           _buildToolButton(
             icon: Icons.select_all,
             tool: DrawingTool.selection,
             tooltip: 'Выбор',
           ),
+          const SizedBox(width: 4),
           _buildToolButton(
             icon: Icons.pan_tool,
             tool: DrawingTool.hand,
             tooltip: 'Перемещение',
           ),
+          const SizedBox(width: 4),
+          _buildToolButton(
+            icon: Icons.format_color_fill,
+            tool: DrawingTool.fill,
+            tooltip: 'Заливка',
+          ),
+          const SizedBox(width: 4),
+          _buildToolButton(
+            icon: Icons.cleaning_services,
+            tool: DrawingTool.eraser,
+            tooltip: 'Ластик',
+          ),
           const VerticalDivider(color: Colors.white30, width: 16),
           _buildColorButton(context),
           const VerticalDivider(color: Colors.white30, width: 16),
-          if (widget.selectedTool == DrawingTool.brush)
+          if (widget.selectedTool == DrawingTool.brush ||
+              widget.selectedTool == DrawingTool.pencil ||
+              widget.selectedTool == DrawingTool.marker ||
+              widget.selectedTool == DrawingTool.eraser)
             _buildThicknessSlider(),
           if (widget.selectedTool == DrawingTool.text)
             _buildFontSizeSlider(),
@@ -104,11 +131,12 @@ class _ToolPanelState extends State<ToolPanel> {
     );
   }
 
-  DrawingTool _selectedTool = DrawingTool.brush;
+  DrawingTool _selectedDrawTool = DrawingTool.brush;
   final Map<DrawingTool, Map<String, dynamic>> _toolIcons = {
     DrawingTool.fill: {'icon': Icons.format_color_fill, 'label': 'Заливка'},
     DrawingTool.eraser: {'icon': Icons.cleaning_services, 'label': 'Ластик'},
     DrawingTool.marker: {'icon': Icons.edit, 'label': 'Маркер'},
+    DrawingTool.pencil: {'icon': Icons.create, 'label': 'Карандаш'},
     DrawingTool.brush: {'icon': Icons.brush, 'label': 'Кисть'},
   };
 
@@ -128,9 +156,9 @@ class _ToolPanelState extends State<ToolPanel> {
           value: entry.key,
           child: Row(
             children: [
-              Icon(entry.value['icon'], color: _selectedTool == entry.key ? Palette.orangeAccent : Colors.black),
+              Icon(entry.value['icon'], color: _selectedDrawTool == entry.key ? Palette.orangeAccent : Colors.black),
               const SizedBox(width: 8),
-              Text(entry.value['label'], style: TextStyle(color: _selectedTool == entry.key ? Palette.orangeAccent : Colors.black),),
+              Text(entry.value['label'], style: TextStyle(color: _selectedDrawTool == entry.key ? Palette.orangeAccent : Colors.black),),
             ],
           ),
         );
@@ -140,7 +168,7 @@ class _ToolPanelState extends State<ToolPanel> {
       if (selected != null) {
         onChange(selected);
         setState(() {
-          _selectedTool = selected;
+          _selectedDrawTool = selected;
         });
       }
     });
@@ -150,8 +178,21 @@ class _ToolPanelState extends State<ToolPanel> {
     required BuildContext context
   }) {
     final isSelected = _toolIcons.keys.contains(widget.selectedTool);
+
+    IconData iconToShow;
+    String tooltip;
+
+    if (isSelected) {
+      iconToShow = _toolIcons[widget.selectedTool]!['icon'];
+      tooltip = _toolIcons[widget.selectedTool]!['label'];
+      _selectedDrawTool = widget.selectedTool;
+    } else {
+      iconToShow = _toolIcons[_selectedDrawTool]!['icon'];
+      tooltip = _toolIcons[_selectedDrawTool]!['label'];
+    }
+
     return Tooltip(
-      message: _toolIcons[_selectedTool]!['label'],
+      message: tooltip,
       child: InkWell(
         onTap: () => _openToolsMenu(context, widget.onToolChanged),
         borderRadius: BorderRadius.circular(30),
@@ -162,7 +203,7 @@ class _ToolPanelState extends State<ToolPanel> {
             shape: BoxShape.circle,
           ),
           child: Icon(
-            _toolIcons[_selectedTool]!['icon'],
+            iconToShow,
             color: isSelected ? Colors.white : Colors.white70,
             size: 24,
           ),
@@ -258,20 +299,53 @@ class _ToolPanelState extends State<ToolPanel> {
     );
   }
 
-// Исправленный метод для слайдера толщины линии
   Widget _buildThicknessSlider() {
+    String label = 'Толщина';
+    double minValue = 1.0;
+    double maxValue = 15.0;
+
+    if (widget.selectedTool == DrawingTool.eraser) {
+      label = 'Размер ластика';
+      minValue = 5.0;
+      maxValue = 30.0;
+    } else if (widget.selectedTool == DrawingTool.pencil) {
+      label = 'Толщина карандаша';
+      minValue = 1.0;
+      maxValue = 10.0;
+    } else if (widget.selectedTool == DrawingTool.marker) {
+      label = 'Толщина маркера';
+      minValue = 3.0;
+      maxValue = 20.0;
+    }
+
+    // Убедимся, что текущее значение находится в допустимом диапазоне
+    double safeValue = _currentThickness;
+    if (safeValue < minValue) safeValue = minValue;
+    if (safeValue > maxValue) safeValue = maxValue;
+
+    if (safeValue != _currentThickness) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() {
+          _currentThickness = safeValue;
+        });
+        widget.onThicknessChanged(safeValue);
+      });
+    }
+
     return Expanded(
+      flex: 3, // Увеличиваем размер слайдера относительно других элементов
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min, // Минимизируем размер по основной оси
+        mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: 40, // Ограничиваем высоту слайдера
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 16), // Добавляем внутренние отступы
             child: Slider(
-              value: _currentThickness,
-              min: 1,
-              max: 15,
-              divisions: 14,
+              value: safeValue,
+              min: minValue,
+              max: maxValue,
+              divisions: ((maxValue - minValue) * 2).round(),
               activeColor: Palette.orangeAccent,
               inactiveColor: Colors.white30,
               onChanged: (value) {
@@ -283,10 +357,10 @@ class _ToolPanelState extends State<ToolPanel> {
             ),
           ),
           SizedBox(
-            height: 12, // Фиксированная высота для текста
+            height: 12,
             child: Text(
-              'Толщина: ${_currentThickness.toStringAsFixed(1)}',
-              style: const TextStyle(color: Colors.white, fontSize: 9),
+              '$label: ${_currentThickness.toStringAsFixed(1)}',
+              style: const TextStyle(color: Colors.white, fontSize: 10),
             ),
           ),
         ],
@@ -294,19 +368,21 @@ class _ToolPanelState extends State<ToolPanel> {
     );
   }
 
-// Исправленный метод для слайдера размера шрифта
+
   Widget _buildFontSizeSlider() {
     return Expanded(
+      flex: 3, // Увеличиваем размер слайдера
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min, // Минимизируем размер по основной оси
+        mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: 40, // Ограничиваем высоту слайдера
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 16), // Добавляем внутренние отступы
             child: Slider(
               value: _currentFontSize,
-              min: 8,
-              max: 48,
+              min: 8.0,  // Минимальный размер шрифта
+              max: 48.0,  // Максимальный размер шрифта
               divisions: 20,
               activeColor: Palette.orangeAccent,
               inactiveColor: Colors.white30,
@@ -319,10 +395,10 @@ class _ToolPanelState extends State<ToolPanel> {
             ),
           ),
           SizedBox(
-            height: 12, // Фиксированная высота для текста
+            height: 12,
             child: Text(
               'Размер: ${_currentFontSize.toStringAsFixed(1)}',
-              style: const TextStyle(color: Colors.white, fontSize: 9),
+              style: const TextStyle(color: Colors.white, fontSize: 10),
             ),
           ),
         ],
