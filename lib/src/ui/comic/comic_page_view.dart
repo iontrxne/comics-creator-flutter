@@ -517,6 +517,10 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
           // Выбор ячейки для редактирования
           widget.onCellSelected(cell.id!);
         },
+        // Добавлен обработчик долгого нажатия
+        onLongPress: () {
+          _showCellCoordinatesDialog(cell);
+        },
         onPanStart: layoutType == editor.CellLayoutType.free ? (details) {
           if (isSelected) {
             setState(() {
@@ -592,6 +596,103 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showCellCoordinatesDialog(editor.Cell cell) {
+    // Контроллеры для полей ввода
+    final TextEditingController posXController = TextEditingController(text: cell.positionX.toString());
+    final TextEditingController posYController = TextEditingController(text: cell.positionY.toString());
+    final TextEditingController widthController = TextEditingController(text: cell.width.toString());
+    final TextEditingController heightController = TextEditingController(text: cell.height.toString());
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Редактировать ячейку ${cell.id}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: posXController,
+                  decoration: const InputDecoration(labelText: 'Позиция X'),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: posYController,
+                  decoration: const InputDecoration(labelText: 'Позиция Y'),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: widthController,
+                  decoration: const InputDecoration(labelText: 'Ширина'),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: heightController,
+                  decoration: const InputDecoration(labelText: 'Высота'),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                // Парсинг введенных значений
+                try {
+                  final double newPosX = double.parse(posXController.text);
+                  final double newPosY = double.parse(posYController.text);
+                  final double newWidth = double.parse(widthController.text);
+                  final double newHeight = double.parse(heightController.text);
+
+                  // Применить изменения с проверкой минимальных размеров
+                  if (newWidth >= 100 && newHeight >= 100) {
+                    // Обновляем позицию ячейки
+                    ref.read(editor.comicEditorProvider.notifier).moveCell(
+                        cell.id!,
+                        newPosX,
+                        newPosY
+                    );
+
+                    // Обновляем размер ячейки
+                    ref.read(editor.comicEditorProvider.notifier).resizeCell(
+                        cell.id!,
+                        newWidth,
+                        newHeight
+                    );
+
+                    Navigator.pop(context);
+                  } else {
+                    // Показать ошибку, если размеры слишком малы
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Минимальный размер ячейки: 100x100'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  // Показать ошибку при неверном формате данных
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Проверьте введенные значения, должны быть числа'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Сохранить'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -820,25 +921,32 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
     setState(() {
-      // Обновляем масштаб
-      _scale = details.scale * (_scale);
+      // Предыдущее значение масштаба для сравнения
+      final double oldScale = _scale;
 
-      // Ограничиваем масштаб
-      _scale = math.max(0.5, math.min(_scale, 3.0));
+      // Обновляем масштаб с учетом ограничений
+      final double newScale = details.scale;
+      _scale = math.max(0.5, math.min(newScale * oldScale, 2.0)); // Более строгое ограничение масштаба
 
       // Обновляем смещение с ограничениями
       if (_lastFocalPoint != null) {
         final Offset delta = details.focalPoint - _lastFocalPoint!;
 
         // Получаем размеры видимой области
-        final Size viewportSize = context.size ?? const Size(800, 1200);
+        final Size viewportSize = context.size ?? const Size(800, 600);
+
+        // Рассчитываем размеры масштабированной страницы
+        final double scaledPageWidth = 800 * _scale;
+        final double scaledPageHeight = 1200 * _scale;
 
         // Рассчитываем максимальное допустимое смещение
-        final double maxOffsetX = viewportSize.width * 0.5;
-        final double maxOffsetY = viewportSize.height * 0.5;
+        final double maxOffsetX = math.max(0, (scaledPageWidth - viewportSize.width) / 2);
+        final double maxOffsetY = math.max(0, (scaledPageHeight - viewportSize.height) / 2);
 
-        // Ограничиваем смещение
+        // Вычисляем новое смещение с учетом того, что оно может меняться при изменении масштаба
         final Offset newOffset = _offset + delta;
+
+        // Ограничиваем смещение, чтобы страница не выходила за пределы видимой области
         _offset = Offset(
           newOffset.dx.clamp(-maxOffsetX, maxOffsetX),
           newOffset.dy.clamp(-maxOffsetY, maxOffsetY),

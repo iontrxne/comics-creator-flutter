@@ -169,19 +169,13 @@ class _ComicPreviewPageState extends ConsumerState<ComicPreviewPage> {
             // Фон страницы
             Container(color: Colors.white),
 
-            // Ячейки
+            // Ячейки (без границ)
             ...page.cells.map((cell) => Positioned(
               left: cell.positionX,
               top: cell.positionY,
               width: cell.width,
               height: cell.height,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                ),
-                // Отображаем фактическое содержимое ячейки вместо номера
-                child: _buildCellContent(cell),
-              ),
+              child: _buildCellContent(cell), // Содержимое без обрамления
             )),
           ],
         ),
@@ -189,10 +183,11 @@ class _ComicPreviewPageState extends ConsumerState<ComicPreviewPage> {
     );
   }
 
+
   // Новый метод для отображения содержимого ячейки
   Widget _buildCellContent(editor.Cell cell) {
     try {
-      // Если JSON пустой или некорректный, показываем заглушку
+      // Если JSON пустой или некорректный, показываем заглушку, но без рамки
       if (cell.contentJson.isEmpty || cell.contentJson == '{"elements":[]}') {
         return Center(
           child: Text(
@@ -202,7 +197,7 @@ class _ComicPreviewPageState extends ConsumerState<ComicPreviewPage> {
         );
       }
 
-      // Парсим JSON и отображаем содержимое
+      // Парсим JSON и отображаем содержимое без рамки
       final content = CellContent.fromJsonString(cell.contentJson);
       return CustomPaint(
         painter: CanvasPainter(
@@ -215,7 +210,7 @@ class _ComicPreviewPageState extends ConsumerState<ComicPreviewPage> {
         size: Size(cell.width, cell.height),
       );
     } catch (e) {
-      // В случае ошибки показываем сообщение
+      // В случае ошибки показываем сообщение без рамки
       return const Center(
         child: Text(
           'Ошибка отображения',
