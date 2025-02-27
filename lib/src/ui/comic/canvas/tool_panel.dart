@@ -1,4 +1,6 @@
 // lib/src/ui/comic/canvas/tool_panel.dart
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../../../config/palette.dart';
 import 'canvas_controller.dart';
@@ -39,7 +41,14 @@ class _ToolPanelState extends State<ToolPanel> {
   void initState() {
     super.initState();
     _selectedColor = widget.currentColor;
-    _currentThickness = widget.currentThickness;
+
+    // Установка корректных начальных значений в зависимости от инструмента
+    if (widget.selectedTool == DrawingTool.eraser) {
+      _currentThickness = math.max(5.0, math.min(widget.currentThickness, 30.0));
+    } else {
+      _currentThickness = math.max(1.0, math.min(widget.currentThickness, 15.0));
+    }
+
     _currentFontSize = widget.currentFontSize;
   }
 
@@ -60,7 +69,7 @@ class _ToolPanelState extends State<ToolPanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 60,
+      height: 70, // Увеличиваем высоту панели
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
         borderRadius: BorderRadius.circular(8),
@@ -70,34 +79,38 @@ class _ToolPanelState extends State<ToolPanel> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildDrawToolsTypeButton(
-              context: context
-          ),
+          _buildDrawToolsTypeButton(context: context),
+          const SizedBox(width: 4), // Добавляем разделители между элементами
           _buildToolButton(
             icon: Icons.text_fields,
             tool: DrawingTool.text,
             tooltip: 'Текст',
           ),
+          const SizedBox(width: 4),
           _buildToolButton(
             icon: Icons.image,
             tool: DrawingTool.image,
             tooltip: 'Изображение',
           ),
+          const SizedBox(width: 4),
           _buildToolButton(
             icon: Icons.select_all,
             tool: DrawingTool.selection,
             tooltip: 'Выбор',
           ),
+          const SizedBox(width: 4),
           _buildToolButton(
             icon: Icons.pan_tool,
             tool: DrawingTool.hand,
             tooltip: 'Перемещение',
           ),
+          const SizedBox(width: 4),
           _buildToolButton(
             icon: Icons.format_color_fill,
             tool: DrawingTool.fill,
             tooltip: 'Заливка',
           ),
+          const SizedBox(width: 4),
           _buildToolButton(
             icon: Icons.cleaning_services,
             tool: DrawingTool.eraser,
@@ -288,26 +301,51 @@ class _ToolPanelState extends State<ToolPanel> {
 
   Widget _buildThicknessSlider() {
     String label = 'Толщина';
+    double minValue = 1.0;
+    double maxValue = 15.0;
+
     if (widget.selectedTool == DrawingTool.eraser) {
       label = 'Размер ластика';
+      minValue = 5.0;
+      maxValue = 30.0;
     } else if (widget.selectedTool == DrawingTool.pencil) {
       label = 'Толщина карандаша';
+      minValue = 1.0;
+      maxValue = 10.0;
     } else if (widget.selectedTool == DrawingTool.marker) {
       label = 'Толщина маркера';
+      minValue = 3.0;
+      maxValue = 20.0;
+    }
+
+    // Убедимся, что текущее значение находится в допустимом диапазоне
+    double safeValue = _currentThickness;
+    if (safeValue < minValue) safeValue = minValue;
+    if (safeValue > maxValue) safeValue = maxValue;
+
+    if (safeValue != _currentThickness) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() {
+          _currentThickness = safeValue;
+        });
+        widget.onThicknessChanged(safeValue);
+      });
     }
 
     return Expanded(
+      flex: 3, // Увеличиваем размер слайдера относительно других элементов
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
+          Container(
             height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 16), // Добавляем внутренние отступы
             child: Slider(
-              value: _currentThickness,
-              min: widget.selectedTool == DrawingTool.eraser ? 5 : 1,
-              max: widget.selectedTool == DrawingTool.eraser ? 30 : 15,
-              divisions: widget.selectedTool == DrawingTool.eraser ? 5 : 14,
+              value: safeValue,
+              min: minValue,
+              max: maxValue,
+              divisions: ((maxValue - minValue) * 2).round(),
               activeColor: Palette.orangeAccent,
               inactiveColor: Colors.white30,
               onChanged: (value) {
@@ -322,7 +360,7 @@ class _ToolPanelState extends State<ToolPanel> {
             height: 12,
             child: Text(
               '$label: ${_currentThickness.toStringAsFixed(1)}',
-              style: const TextStyle(color: Colors.white, fontSize: 9),
+              style: const TextStyle(color: Colors.white, fontSize: 10),
             ),
           ),
         ],
@@ -330,18 +368,21 @@ class _ToolPanelState extends State<ToolPanel> {
     );
   }
 
+
   Widget _buildFontSizeSlider() {
     return Expanded(
+      flex: 3, // Увеличиваем размер слайдера
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
+          Container(
             height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 16), // Добавляем внутренние отступы
             child: Slider(
               value: _currentFontSize,
-              min: 8,
-              max: 48,
+              min: 8.0,  // Минимальный размер шрифта
+              max: 48.0,  // Максимальный размер шрифта
               divisions: 20,
               activeColor: Palette.orangeAccent,
               inactiveColor: Colors.white30,
@@ -357,7 +398,7 @@ class _ToolPanelState extends State<ToolPanel> {
             height: 12,
             child: Text(
               'Размер: ${_currentFontSize.toStringAsFixed(1)}',
-              style: const TextStyle(color: Colors.white, fontSize: 9),
+              style: const TextStyle(color: Colors.white, fontSize: 10),
             ),
           ),
         ],

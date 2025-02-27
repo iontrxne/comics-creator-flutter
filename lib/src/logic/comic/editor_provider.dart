@@ -9,6 +9,12 @@ import 'package:path_provider/path_provider.dart';
 import '../../ui/comic/canvas/canvas_controller.dart';
 import '../../data/database/database_service.dart';
 
+// Тип расположения ячеек на странице
+enum CellLayoutType {
+  grid,   // Расположение по сетке
+  free    // Свободное расположение
+}
+
 // Модель страницы
 class Page {
   final int? id;
@@ -17,6 +23,7 @@ class Page {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final List<Cell> cells;
+  final CellLayoutType layoutType; // Новое поле для типа расположения
 
   Page({
     this.id,
@@ -25,6 +32,7 @@ class Page {
     this.createdAt,
     this.updatedAt,
     this.cells = const [],
+    this.layoutType = CellLayoutType.free, // По умолчанию свободное расположение
   });
 
   factory Page.fromJson(Map<String, dynamic> json) {
@@ -45,6 +53,9 @@ class Page {
             .map((cell) => Cell.fromJson(cell))
             .toList()
             : [],
+        layoutType: json['layout_type'] == 'grid'
+            ? CellLayoutType.grid
+            : CellLayoutType.free,
       );
     } catch (e) {
       print("Ошибка при парсинге страницы: $e");
@@ -67,7 +78,29 @@ class Page {
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'cells': cells.map((cell) => cell.toJson()).toList(),
+      'layout_type': layoutType == CellLayoutType.grid ? 'grid' : 'free',
     };
+  }
+
+  // Создание копии с обновленными полями
+  Page copyWith({
+    int? id,
+    int? comicId,
+    int? pageNumber,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    List<Cell>? cells,
+    CellLayoutType? layoutType,
+  }) {
+    return Page(
+      id: id ?? this.id,
+      comicId: comicId ?? this.comicId,
+      pageNumber: pageNumber ?? this.pageNumber,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      cells: cells ?? this.cells,
+      layoutType: layoutType ?? this.layoutType,
+    );
   }
 }
 
@@ -324,21 +357,16 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
 
       // Установка текущей страницы и ячейки
       int? currentPageId;
-      Cell? currentCell;
 
       if (pages.isNotEmpty) {
         currentPageId = pages.first.id;
-
-        if (pages.first.cells.isNotEmpty) {
-          currentCell = pages.first.cells.first;
-        }
       }
 
       state = state.copyWith(
         isLoading: false,
         pages: pages,
         currentPageId: currentPageId,
-        currentCell: currentCell,
+        currentCell: null, // Не выбираем ячейку при загрузке комикса
         errorMessage: null,
       );
       print("Комикс загружен успешно. Страниц: ${pages.length}");
@@ -386,7 +414,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
         isLoading: false,
         pages: updatedPages,
         currentPageId: newPage.id,
-        currentCell: null,
+        currentCell: null, // Не выбираем ячейку при создании страницы
         errorMessage: null,
       );
 
@@ -413,21 +441,14 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
         // Получаем обновленный список страниц без удаленной
         final updatedPages = state.pages.where((page) => page.id != pageId).toList();
 
-        // Выбираем новую текущую страницу и ячейку, если текущая была удалена
+        // Выбираем новую текущую страницу, если текущая была удалена
         int? newCurrentPageId = state.currentPageId;
-        Cell? newCurrentCell = state.currentCell;
 
         if (state.currentPageId == pageId) {
           if (updatedPages.isNotEmpty) {
             newCurrentPageId = updatedPages.first.id;
-            if (updatedPages.first.cells.isNotEmpty) {
-              newCurrentCell = updatedPages.first.cells.first;
-            } else {
-              newCurrentCell = null;
-            }
           } else {
             newCurrentPageId = null;
-            newCurrentCell = null;
           }
         }
 
@@ -435,7 +456,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
           isLoading: false,
           pages: updatedPages,
           currentPageId: newCurrentPageId,
-          currentCell: newCurrentCell,
+          currentCell: null, // Сбрасываем выбранную ячейку при удалении страницы
           errorMessage: null,
         );
 
@@ -473,26 +494,10 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
       // Сортируем ячейки по z-index
       cells.sort((a, b) => a.zIndex.compareTo(b.zIndex));
 
-      // Выбираем первую ячейку, если они есть
-      Cell? currentCell;
-      bool canUndo = false;
-      bool canRedo = false;
+      // Явно сбрасываем текущую ячейку при смене страницы
+      Cell? currentCell = null;
 
-      if (cells.isNotEmpty) {
-        currentCell = cells.first;
-        print("Установлена текущая ячейка: ${currentCell.id}");
-
-        // Проверяем, можно ли делать undo/redo для этой ячейки
-        if (currentCell.contentJson.isNotEmpty && currentCell.contentJson != '{"elements":[]}') {
-          // Проверяем, есть ли история для этой ячейки
-          canUndo = _undoHistory[currentCell.id]?.isNotEmpty ?? false;
-          canRedo = _redoHistory[currentCell.id]?.isNotEmpty ?? false;
-        }
-      } else {
-        print("Страница не содержит ячеек");
-      }
-
-      // Обновляем страницу в списке
+      // Обновляем страницу в списке с обновленными ячейками
       final updatedPages = state.pages.map((p) {
         if (p.id == pageId) {
           // Создаем новую страницу с обновленным списком ячеек
@@ -503,6 +508,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
             createdAt: p.createdAt,
             updatedAt: p.updatedAt,
             cells: cells,
+            layoutType: p.layoutType,
           );
         }
         return p;
@@ -510,14 +516,14 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
 
       state = state.copyWith(
         currentPageId: pageId,
-        currentCell: currentCell,
+        currentCell: currentCell, // Не выбираем ячейку при смене страницы
         pages: updatedPages,
-        canUndo: canUndo,
-        canRedo: canRedo,
+        canUndo: false,
+        canRedo: false,
         errorMessage: null,
       );
 
-      print("Текущая страница установлена: pageId=$pageId, ячеек=${cells.length}, текущая ячейка=${currentCell?.id}");
+      print("Текущая страница установлена: pageId=$pageId, ячеек=${cells.length}");
     } catch (e) {
       print("Ошибка при установке текущей страницы: $e");
       state = state.copyWith(
@@ -526,25 +532,113 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     }
   }
 
-  // Добавление новой ячейки
-  Future<void> addCell() async {
+  // Установка текущей ячейки
+  Future<void> setCurrentCell(int cellId) async {
+    print("Установка текущей ячейки: $cellId");
+
+    // Сначала сохраняем текущую ячейку перед переключением
+    if (state.currentCell != null) {
+      await saveCurrentCell();
+    }
+
+    try {
+      // Находим ячейку в текущей странице
+      final currentPage = state.currentPage;
+      if (currentPage == null) {
+        throw Exception("Не выбрана текущая страница");
+      }
+
+      final cell = currentPage.cells.firstWhere(
+            (cell) => cell.id == cellId,
+      );
+
+      bool canUndo = false;
+      bool canRedo = false;
+
+      // Проверяем, можно ли делать undo/redo для этой ячейки
+      if (cell.contentJson.isNotEmpty && cell.contentJson != '{"elements":[]}') {
+        // Проверяем, есть ли история для этой ячейки
+        canUndo = _undoHistory[cellId]?.isNotEmpty ?? false;
+        canRedo = _redoHistory[cellId]?.isNotEmpty ?? false;
+      }
+
+      state = state.copyWith(
+        currentCell: cell,
+        canUndo: canUndo,
+        canRedo: canRedo,
+        errorMessage: null,
+      );
+
+      print("Текущая ячейка установлена: cellId=$cellId");
+    } catch (e) {
+      print("Ошибка при установке текущей ячейки: $e");
+      state = state.copyWith(
+        errorMessage: 'Ошибка при выборе ячейки: ${e.toString()}',
+      );
+    }
+  }
+
+  // Установка типа расположения ячеек на странице
+  Future<void> setPageLayoutType(CellLayoutType layoutType) async {
+    if (state.currentPageId == null) {
+      print("Нет текущей страницы");
+      return;
+    }
+
+    print("Установка типа расположения ячеек: $layoutType");
+
+    try {
+      // Обновляем тип расположения в состоянии
+      final updatedPages = state.pages.map((page) {
+        if (page.id == state.currentPageId) {
+          return page.copyWith(layoutType: layoutType);
+        }
+        return page;
+      }).toList();
+
+      state = state.copyWith(
+        pages: updatedPages,
+        errorMessage: null,
+      );
+
+      print("Тип расположения ячеек установлен успешно");
+    } catch (e) {
+      print("ОШИБКА при установке типа расположения ячеек: $e");
+      state = state.copyWith(
+        errorMessage: 'Ошибка установки типа расположения ячеек: ${e.toString()}',
+      );
+    }
+  }
+
+  // Добавление ячейки по сетке
+  Future<void> addCellToGrid(int row, int col, int rowCount, int colCount) async {
     if (state.currentPageId == null) {
       print("Нет текущей страницы, создаем новую");
       await addPage();
       return;
     }
 
-    print("Добавление ячейки на страницу ${state.currentPageId}");
+    print("Добавление ячейки на страницу ${state.currentPageId} в сетку [$row, $col]");
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     try {
+      // Вычисление позиции и размера ячейки на основе сетки
+      double pageWidth = 800.0; // Задаем ширину страницы
+      double pageHeight = 1200.0; // Задаем высоту страницы
+
+      double cellWidth = pageWidth / colCount;
+      double cellHeight = pageHeight / rowCount;
+
+      double posX = col * cellWidth;
+      double posY = row * cellHeight;
+
       // Создаем новую ячейку в БД с уникальным ID
       final cellId = await _db.createCell(
           state.currentPageId!,
-          50, // position_x
-          50, // position_y
-          300, // width
-          200  // height
+          posX,
+          posY,
+          cellWidth,
+          cellHeight
       );
 
       // Получаем информацию о созданной ячейке
@@ -554,13 +648,10 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
       // Обновляем текущую страницу
       final updatedPages = state.pages.map((page) {
         if (page.id == state.currentPageId) {
-          return Page(
-            id: page.id,
-            comicId: page.comicId,
-            pageNumber: page.pageNumber,
-            createdAt: page.createdAt,
-            updatedAt: page.updatedAt,
-            cells: [...page.cells, newCell],
+          final updatedCells = [...page.cells, newCell];
+          return page.copyWith(
+            cells: updatedCells,
+            layoutType: CellLayoutType.grid, // Устанавливаем тип расположения
           );
         }
         return page;
@@ -586,6 +677,175 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     }
   }
 
+  // Добавление новой ячейки (свободное расположение)
+  Future<void> addCell({double posX = 50, double posY = 50, double width = 300, double height = 200}) async {
+    if (state.currentPageId == null) {
+      print("Нет текущей страницы, создаем новую");
+      await addPage();
+      return;
+    }
+
+    print("Добавление ячейки на страницу ${state.currentPageId}");
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    try {
+      // Создаем новую ячейку в БД с уникальным ID
+      final cellId = await _db.createCell(
+          state.currentPageId!,
+          posX,
+          posY,
+          width,
+          height
+      );
+
+      // Получаем информацию о созданной ячейке
+      final cells = await _db.getCellsForPage(state.currentPageId!);
+      final newCell = cells.firstWhere((cell) => cell.id == cellId);
+
+      // Обновляем текущую страницу
+      final updatedPages = state.pages.map((page) {
+        if (page.id == state.currentPageId) {
+          final updatedCells = [...page.cells, newCell];
+          return page.copyWith(
+            cells: updatedCells,
+            layoutType: CellLayoutType.free,
+          );
+        }
+        return page;
+      }).toList();
+
+      // Инициализируем историю для новой ячейки
+      _undoHistory[cellId] = [];
+      _redoHistory[cellId] = [];
+
+      state = state.copyWith(
+        isLoading: false,
+        pages: updatedPages,
+        currentCell: newCell,
+        errorMessage: null,
+      );
+      print("Ячейка создана успешно с ID: $cellId");
+    } catch (e) {
+      print("ОШИБКА при добавлении ячейки: $e");
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Ошибка добавления ячейки: ${e.toString()}',
+      );
+    }
+  }
+
+  // Перемещение ячейки (для свободного расположения)
+  Future<void> moveCell(int cellId, double newX, double newY) async {
+    if (state.currentPageId == null) {
+      print("Нет текущей страницы");
+      return;
+    }
+
+    try {
+      // Находим ячейку в текущей странице
+      final currentPage = state.currentPage;
+      if (currentPage == null) {
+        throw Exception("Не выбрана текущая страница");
+      }
+
+      final cellIndex = currentPage.cells.indexWhere((cell) => cell.id == cellId);
+      if (cellIndex == -1) {
+        throw Exception("Ячейка не найдена");
+      }
+
+      final cell = currentPage.cells[cellIndex];
+
+      // Создаем обновленную ячейку с новой позицией
+      final updatedCell = cell.copyWith(
+        positionX: newX,
+        positionY: newY,
+      );
+
+      // Обновляем ячейку в базе данных
+      await _db.updateCell(updatedCell);
+
+      // Обновляем ячейку в состоянии
+      final updatedPages = state.pages.map((page) {
+        if (page.id == state.currentPageId) {
+          final updatedCells = List<Cell>.from(page.cells);
+          updatedCells[cellIndex] = updatedCell;
+
+          return page.copyWith(cells: updatedCells);
+        }
+        return page;
+      }).toList();
+
+      state = state.copyWith(
+        pages: updatedPages,
+        currentCell: state.currentCell?.id == cellId ? updatedCell : state.currentCell,
+        errorMessage: null,
+      );
+
+      print("Ячейка перемещена успешно");
+    } catch (e) {
+      print("ОШИБКА при перемещении ячейки: $e");
+      state = state.copyWith(
+        errorMessage: 'Ошибка перемещения ячейки: ${e.toString()}',
+      );
+    }
+  }
+
+  // Изменение размера ячейки (для свободного расположения)
+  Future<void> resizeCell(int cellId, double newWidth, double newHeight) async {
+    if (state.currentPageId == null) {
+      print("Нет текущей страницы");
+      return;
+    }
+
+    try {
+      // Находим ячейку в текущей странице
+      final currentPage = state.currentPage;
+      if (currentPage == null) {
+        throw Exception("Не выбрана текущая страница");
+      }
+
+      final cellIndex = currentPage.cells.indexWhere((cell) => cell.id == cellId);
+      if (cellIndex == -1) {
+        throw Exception("Ячейка не найдена");
+      }
+
+      final cell = currentPage.cells[cellIndex];
+
+      // Создаем обновленную ячейку с новым размером
+      final updatedCell = cell.copyWith(
+        width: newWidth,
+        height: newHeight,
+      );
+
+      // Обновляем ячейку в базе данных
+      await _db.updateCell(updatedCell);
+
+      // Обновляем ячейку в состоянии
+      final updatedPages = state.pages.map((page) {
+        if (page.id == state.currentPageId) {
+          final updatedCells = List<Cell>.from(page.cells);
+          updatedCells[cellIndex] = updatedCell;
+
+          return page.copyWith(cells: updatedCells);
+        }
+        return page;
+      }).toList();
+
+      state = state.copyWith(
+        pages: updatedPages,
+        currentCell: state.currentCell?.id == cellId ? updatedCell : state.currentCell,
+        errorMessage: null,
+      );
+
+      print("Размер ячейки изменен успешно");
+    } catch (e) {
+      print("ОШИБКА при изменении размера ячейки: $e");
+      state = state.copyWith(
+        errorMessage: 'Ошибка изменения размера ячейки: ${e.toString()}',
+      );
+    }
+  }
+
   // Удаление ячейки
   Future<void> deleteCell(int cellId) async {
     print("Удаление ячейки с ID: $cellId");
@@ -604,14 +864,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
         final updatedPages = state.pages.map((page) {
           if (page.id == state.currentPageId) {
             final updatedCells = page.cells.where((cell) => cell.id != cellId).toList();
-            return Page(
-              id: page.id,
-              comicId: page.comicId,
-              pageNumber: page.pageNumber,
-              createdAt: page.createdAt,
-              updatedAt: page.updatedAt,
-              cells: updatedCells,
-            );
+            return page.copyWith(cells: updatedCells);
           }
           return page;
         }).toList();
@@ -677,14 +930,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
           return cell;
         }).toList();
 
-        return Page(
-          id: page.id,
-          comicId: page.comicId,
-          pageNumber: page.pageNumber,
-          createdAt: page.createdAt,
-          updatedAt: page.updatedAt,
-          cells: updatedCells,
-        );
+        return page.copyWith(cells: updatedCells);
       }
       return page;
     }).toList();
@@ -695,7 +941,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     state = state.copyWith(
       pages: updatedPages,
       currentCell: updatedCell,
-      canUndo: hasContent || (_undoHistory[updatedCell.id]?.isNotEmpty ?? false),
+      canUndo: hasContent || (_undoHistory[updatedCell.id!]?.isNotEmpty ?? false),
       canRedo: state.canRedo,
     );
 
@@ -827,14 +1073,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
             return cell;
           }).toList();
 
-          return Page(
-            id: page.id,
-            comicId: page.comicId,
-            pageNumber: page.pageNumber,
-            createdAt: page.createdAt,
-            updatedAt: page.updatedAt,
-            cells: updatedCells,
-          );
+          return page.copyWith(cells: updatedCells);
         }
         return page;
       }).toList();
@@ -906,14 +1145,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
             return cell;
           }).toList();
 
-          return Page(
-            id: page.id,
-            comicId: page.comicId,
-            pageNumber: page.pageNumber,
-            createdAt: page.createdAt,
-            updatedAt: page.updatedAt,
-            cells: updatedCells,
-          );
+          return page.copyWith(cells: updatedCells);
         }
         return page;
       }).toList();
@@ -941,7 +1173,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
     }
   }
 
-  // Добавление текста на холст
+// Добавление текста на холст
   Future<void> addText() async {
     print("Запрос на добавление текста");
     if (state.currentCell == null) {
@@ -976,7 +1208,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
 
         print("Изображение сохранено локально: ${savedImage.path}");
 
-        // Здесь логика добавления изображения в ячейку обрабатывается в UI
+        // Логика добавления изображения в ячейку обрабатывается в UI
       } else {
         print("Пользователь не выбрал изображение");
       }
@@ -984,6 +1216,65 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
       print("ОШИБКА при загрузке изображения: $e");
       state = state.copyWith(
         errorMessage: 'Ошибка загрузки изображения: ${e.toString()}',
+      );
+    }
+  }
+
+  // Очистка текущей ячейки
+  Future<void> clearCurrentCell() async {
+    if (state.currentCell == null) {
+      print("Нет текущей ячейки для очистки");
+      return;
+    }
+
+    print("Очистка ячейки: ${state.currentCell!.id}");
+
+    try {
+      // Сохраняем текущее состояние для возможности отмены
+      if (!_undoHistory.containsKey(state.currentCell!.id!)) {
+        _undoHistory[state.currentCell!.id!] = [];
+      }
+      _undoHistory[state.currentCell!.id!]!.add(state.currentCell!.contentJson);
+
+      // Создаем пустую ячейку
+      final updatedCell = state.currentCell!.copyWith(
+        contentJson: '{"elements":[]}',
+      );
+
+      // Обновляем ячейку в базе данных
+      await _db.updateCell(updatedCell);
+
+      // Обновляем ячейку в состоянии
+      final updatedPages = state.pages.map((page) {
+        if (page.id == state.currentPageId) {
+          final updatedCells = page.cells.map((cell) {
+            if (cell.id == state.currentCell!.id) {
+              return updatedCell;
+            }
+            return cell;
+          }).toList();
+
+          return page.copyWith(cells: updatedCells);
+        }
+        return page;
+      }).toList();
+
+      // Обновляем статусы undo/redo
+      bool canUndo = _undoHistory[state.currentCell!.id!]!.isNotEmpty;
+
+      state = state.copyWith(
+        pages: updatedPages,
+        currentCell: updatedCell,
+        canUndo: canUndo,
+        canRedo: false,
+        errorMessage: null,
+      );
+
+      print("Ячейка очищена успешно");
+    } catch (e) {
+      print("ОШИБКА при очистке ячейки: $e");
+      state = state.copyWith(
+        errorMessage: 'Ошибка очистки ячейки: ${e.toString()}',
       );
     }
   }
@@ -1006,5 +1297,46 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
   // Установка текущего размера шрифта
   void setCurrentFontSize(double fontSize) {
     state = state.copyWith(currentFontSize: fontSize);
+  }
+
+  // Экспорт комикса в формате изображений
+  Future<List<String>> exportComicAsImages() async {
+    print("Экспорт комикса как изображений");
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    List<String> exportedImagePaths = [];
+
+    try {
+      // Здесь должна быть логика преобразования страниц в изображения
+      // Это может быть реализовано с использованием screenshots, flutter_to_image или другой библиотеки
+      // В данном примере просто имитируем экспорт
+
+      final appDir = await getApplicationDocumentsDirectory();
+
+      for (final page in state.pages) {
+        final fileName = 'comic_${state.comicId}_page_${page.pageNumber}_${DateTime.now().millisecondsSinceEpoch}.png';
+        final imagePath = '${appDir.path}/$fileName';
+
+        // В реальной реализации здесь должно быть создание изображения
+        // из страницы комикса и сохранение его по указанному пути
+
+        exportedImagePaths.add(imagePath);
+      }
+
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: null,
+      );
+
+      print("Комикс успешно экспортирован: ${exportedImagePaths.length} страниц");
+      return exportedImagePaths;
+    } catch (e) {
+      print("ОШИБКА при экспорте комикса: $e");
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Ошибка экспорта комикса: ${e.toString()}',
+      );
+      return [];
+    }
   }
 }

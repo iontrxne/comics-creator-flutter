@@ -1,6 +1,11 @@
 // lib/src/ui/comic/canvas/canvas_controller.dart
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+
+// Размеры холста по умолчанию
+const double DEFAULT_CANVAS_WIDTH = 800.0;
+const double DEFAULT_CANVAS_HEIGHT = 600.0;
 
 // Перечисление инструментов рисования
 enum DrawingTool {
@@ -242,13 +247,19 @@ class FillElement implements CanvasElement {
 // Класс для содержимого ячейки
 class CellContent {
   List<CanvasElement> elements;
+  double canvasWidth;
+  double canvasHeight;
 
   CellContent({
     required this.elements,
+    this.canvasWidth = DEFAULT_CANVAS_WIDTH,
+    this.canvasHeight = DEFAULT_CANVAS_HEIGHT,
   });
 
   Map<String, dynamic> toJson() => {
     'elements': elements.map((e) => e.toJson()).toList(),
+    'canvas_width': canvasWidth,
+    'canvas_height': canvasHeight,
   };
 
   String toJsonString() => jsonEncode(toJson());
@@ -275,6 +286,8 @@ class CellContent {
             throw Exception('Unknown element type: $type');
         }
       }).toList(),
+      canvasWidth: (json['canvas_width'] as num?)?.toDouble() ?? DEFAULT_CANVAS_WIDTH,
+      canvasHeight: (json['canvas_height'] as num?)?.toDouble() ?? DEFAULT_CANVAS_HEIGHT,
     );
   }
 
@@ -296,6 +309,8 @@ class CellContent {
   CellContent copy() {
     return CellContent(
       elements: List.from(elements),
+      canvasWidth: canvasWidth,
+      canvasHeight: canvasHeight,
     );
   }
 
@@ -356,8 +371,19 @@ class CanvasController {
     onContentChanged(_content, previousContent);
   }
 
-  // Обработка начала рисования
+  // Проверка, находится ли позиция внутри ячейки
+  bool isPositionInsideCell(Offset position) {
+    return position.dx >= 0 && position.dx <= _content.canvasWidth &&
+        position.dy >= 0 && position.dy <= _content.canvasHeight;
+  }
+
+  // Обработка начала рисования с проверкой границ
   void startDrawing(Offset position) {
+    // Проверяем, находится ли позиция внутри границ ячейки
+    if (!isPositionInsideCell(position)) {
+      return; // Не начинаем рисование, если точка вне ячейки
+    }
+
     if (currentTool == DrawingTool.brush ||
         currentTool == DrawingTool.pencil ||
         currentTool == DrawingTool.marker) {
@@ -373,8 +399,13 @@ class CanvasController {
     }
   }
 
-  // Обработка продолжения рисования
+  // Обработка продолжения рисования с проверкой границ
   void continueDrawing(Offset position) {
+    // Проверяем, находится ли позиция внутри границ ячейки
+    if (!isPositionInsideCell(position)) {
+      return; // Не продолжаем рисование, если точка вне ячейки
+    }
+
     if (currentTool == DrawingTool.brush ||
         currentTool == DrawingTool.pencil ||
         currentTool == DrawingTool.marker) {
@@ -510,26 +541,137 @@ class CanvasController {
     }
   }
 
-  // Реализация инструмента заливки
+  // Обновленная реализация инструмента заливки
   void _useFillTool(Offset position) {
-    // Сохраняем текущее состояние перед заливкой
     final previousContent = _content.copy();
 
-    // Создаем элемент заливки в месте клика
-    final element = FillElement(
-      color: '#${currentColor.value.toRadixString(16).substring(2)}',
-      x: position.dx,
-      y: position.dy,
-    );
+    // Преобразуем цвет в HEX строку
+    String colorHex = '#${currentColor.value.toRadixString(16).substring(2)}';
 
-    // Добавляем элемент заливки в содержимое
-    _content.addElement(element);
+    // Находим элементы, которые пересекаются с точкой заливки
+    List<int> elementsAtPoint = [];
+    for (int i = 0; i < _content.elements.length; i++) {
+      final element = _content.elements[i];
+
+      if (element is BrushElement) {
+        // Для линий проверяем близость точек
+        for (var point in element.points) {
+          if ((position.dx - point.x).abs() < 10 &&
+              (position.dy - point.y).abs() < 10) {
+            elementsAtPoint.add(i);
+            break;
+          }
+        }
+      } else if (element is RectangleElement) {
+        // Для прямоугольников проверяем, попадает ли точка внутрь
+        if (position.dx >= element.x &&
+            position.dx <= element.x + element.width &&
+            position.dy >= element.y &&
+            position.dy <= element.y + element.height) {
+          elementsAtPoint.add(i);
+        }
+      } else if (element is FillElement) {
+        // Находим существующую заливку, которая перекрывает эту точку
+        if (position.dx >= 0 &&
+            position.dx <= _content.canvasWidth &&
+            position.dy >= 0 &&
+            position.dy <= _content.canvasHeight) {
+          elementsAtPoint.add(i);
+        }
+      }
+    }
+
+    // Если нашли элементы для заливки
+    if (elementsAtPoint.isNotEmpty) {
+      // Заливаем последний (верхний) элемент
+      final elementIndex = elementsAtPoint.last;
+      final element = _content.elements[elementIndex];
+
+      if (element is RectangleElement) {
+        // Для прямоугольника меняем цвет заливки
+        _content.elements[elementIndex] = RectangleElement(
+          x: element.x,
+          y: element.y,
+          width: element.width,
+          height: element.height,
+          strokeColor: element.strokeColor,
+          strokeWidth: element.strokeWidth,
+          fillColor: colorHex, // Устанавливаем новый цвет заливки
+        );
+      } else if (element is FillElement) {
+        // Обновляем существующую заливку
+        _content.elements[elementIndex] = FillElement(
+          color: colorHex,
+          x: element.x,
+          y: element.y,
+        );
+      } else {
+        // Для других элементов создаем новую заливку поверх
+        // Здесь можно реализовать более сложную логику заливки фигур
+        // Для простоты, создаем прямоугольник заливки вокруг элемента
+
+        // Находим границы элемента
+        double minX = double.infinity;
+        double minY = double.infinity;
+        double maxX = 0;
+        double maxY = 0;
+
+        if (element is BrushElement) {
+          for (var point in element.points) {
+            minX = math.min(minX, point.x);
+            minY = math.min(minY, point.y);
+            maxX = math.max(maxX, point.x);
+            maxY = math.max(maxY, point.y);
+          }
+
+          // Добавляем отступ
+          minX -= 5;
+          minY -= 5;
+          maxX += 5;
+          maxY += 5;
+
+          // Создаем прямоугольник с заливкой
+          final fillRectangle = RectangleElement(
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY,
+            strokeColor: colorHex,
+            strokeWidth: 1,
+            fillColor: colorHex,
+          );
+
+          // Добавляем прямоугольник заливки перед элементом
+          _content.elements.insert(elementIndex, fillRectangle);
+        }
+      }
+    } else {
+      // Если нет элементов в точке заливки, создаем заливку в этой точке
+      // Это может быть полезно для заливки пустых областей
+      final fillElement = FillElement(
+        color: colorHex,
+        x: position.dx,
+        y: position.dy,
+      );
+
+      // Добавляем элемент заливки в начало списка (будет под всеми элементами)
+      _content.elements.insert(0, fillElement);
+    }
 
     // Уведомляем с предыдущим состоянием
     notifyContentChanged(previousContent);
   }
 
   void addText(String text, Offset position) {
+    // Проверяем, находится ли позиция внутри границ ячейки
+    if (!isPositionInsideCell(position)) {
+      // Корректируем позицию, чтобы текст был внутри ячейки
+      position = Offset(
+          math.max(0, math.min(position.dx, _content.canvasWidth)),
+          math.max(0, math.min(position.dy, _content.canvasHeight))
+      );
+    }
+
     // Сохраняем текущее состояние перед изменением
     final previousContent = _content.copy();
 
@@ -548,6 +690,15 @@ class CanvasController {
 
   // Добавление изображения
   void addImage(String path, Offset position, {double? width, double? height}) {
+    // Проверяем, находится ли позиция внутри границ ячейки
+    if (!isPositionInsideCell(position)) {
+      // Корректируем позицию, чтобы изображение было внутри ячейки
+      position = Offset(
+          math.max(0, math.min(position.dx, _content.canvasWidth)),
+          math.max(0, math.min(position.dy, _content.canvasHeight))
+      );
+    }
+
     // Сохраняем текущее состояние перед изменением
     final previousContent = _content.copy();
 
@@ -620,6 +771,15 @@ class CanvasController {
   // Перемещение выбранного элемента
   void _moveSelectedElement(Offset newPosition) {
     if (_selectedElementIndex == null) return;
+
+    // Проверяем, находится ли позиция внутри границ ячейки
+    if (!isPositionInsideCell(newPosition)) {
+      // Корректируем позицию, чтобы оставаться внутри ячейки
+      newPosition = Offset(
+          math.max(0, math.min(newPosition.dx, _content.canvasWidth)),
+          math.max(0, math.min(newPosition.dy, _content.canvasHeight))
+      );
+    }
 
     // Сохраняем текущее состояние перед изменением
     final previousContent = _content.copy();

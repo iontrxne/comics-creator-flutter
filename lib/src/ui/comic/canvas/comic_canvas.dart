@@ -603,6 +603,7 @@ class CanvasPainter extends CustomPainter {
       ..color = Color(int.parse(element.color.substring(1), radix: 16) + 0xFF000000)
       ..style = PaintingStyle.fill;
 
+    // Рисуем прямоугольник на всю площадь холста
     canvas.drawRect(
         Rect.fromLTWH(0, 0, cell.width, cell.height),
         fillPaint
