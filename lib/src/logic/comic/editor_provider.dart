@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -755,6 +756,14 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
 
       final cell = currentPage.cells[cellIndex];
 
+      // Ограничиваем позицию в пределах страницы
+      // Устанавливаем макс. значения с учетом размера ячейки
+      double maxX = 800 - cell.width; // Ширина страницы минус ширина ячейки
+      double maxY = 1200 - cell.height; // Высота страницы минус высота ячейки
+
+      newX = math.max(0, math.min(newX, maxX));
+      newY = math.max(0, math.min(newY, maxY));
+
       // Создаем обновленную ячейку с новой позицией
       final updatedCell = cell.copyWith(
         positionX: newX,
@@ -781,7 +790,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
         errorMessage: null,
       );
 
-      print("Ячейка перемещена успешно");
+      print("Ячейка перемещена успешно на позицию: ($newX, $newY)");
     } catch (e) {
       print("ОШИБКА при перемещении ячейки: $e");
       state = state.copyWith(
@@ -811,6 +820,18 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
 
       final cell = currentPage.cells[cellIndex];
 
+      // Устанавливаем ограничения для размеров
+      // Минимальный размер
+      newWidth = math.max(100.0, newWidth);
+      newHeight = math.max(100.0, newHeight);
+
+      // Максимальный размер с учетом позиции (чтобы не выходить за границы страницы)
+      double maxWidth = 800 - cell.positionX; // Ширина страницы минус позиция X
+      double maxHeight = 1200 - cell.positionY; // Высота страницы минус позиция Y
+
+      newWidth = math.min(newWidth, maxWidth);
+      newHeight = math.min(newHeight, maxHeight);
+
       // Создаем обновленную ячейку с новым размером
       final updatedCell = cell.copyWith(
         width: newWidth,
@@ -837,7 +858,7 @@ class ComicEditorNotifier extends StateNotifier<EditorState> {
         errorMessage: null,
       );
 
-      print("Размер ячейки изменен успешно");
+      print("Размер ячейки изменен успешно: ширина=$newWidth, высота=$newHeight");
     } catch (e) {
       print("ОШИБКА при изменении размера ячейки: $e");
       state = state.copyWith(

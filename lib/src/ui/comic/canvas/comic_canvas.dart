@@ -1,6 +1,7 @@
 // lib/src/ui/comic/canvas/comic_canvas.dart
 import 'dart:convert';
 import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'canvas_controller.dart';
 import '../../../logic/comic/editor_provider.dart';
@@ -121,6 +122,32 @@ class ComicCanvasState extends State<ComicCanvas> {
       );
     }
 
+    // Рассчитываем масштаб для наилучшего отображения ячейки
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final Size viewportSize = MediaQuery.of(context).size;
+        final double cellWidth = widget.currentCell.width;
+        final double cellHeight = widget.currentCell.height;
+
+        // Вычисляем масштаб, чтобы ячейка помещалась в видимую область с учетом отступов
+        double scaleX = (viewportSize.width * 0.8) / cellWidth;
+        double scaleY = (viewportSize.height * 0.6) / cellHeight;
+        double newScale = math.min(scaleX, scaleY);
+
+        // Ограничиваем масштаб разумными пределами
+        newScale = math.max(0.5, math.min(newScale, 2.0));
+
+        setState(() {
+          _scale = newScale;
+          // Центрируем ячейку
+          _offset = Offset(
+              (viewportSize.width - cellWidth * _scale) / 2,
+              (viewportSize.height - cellHeight * _scale) / 4
+          );
+        });
+      }
+    });
+
     // Сбрасываем состояние масштабирования и панорамирования
     setState(() {
       _scale = 1.0;
@@ -231,26 +258,29 @@ class ComicCanvasState extends State<ComicCanvas> {
 
     if (_controller == null) return;
 
+    if (widget.tool == DrawingTool.hand) {
+      // Для инструмента перемещения ничего не делаем
+      return;
+    }
+
+    // Для всех инструментов рисования трансформируем координаты и применяем ограничения
+    final localPosition = _transformPosition(details.localFocalPoint);
+
+    setState(() {
+      _lastPosition = localPosition;
+    });
+
     if (widget.tool == DrawingTool.brush ||
         widget.tool == DrawingTool.pencil ||
         widget.tool == DrawingTool.marker) {
-      final localPosition = _transformPosition(details.localFocalPoint);
-      _lastPosition = localPosition;
       _controller!.startDrawing(localPosition);
     } else if (widget.tool == DrawingTool.eraser) {
-      final localPosition = _transformPosition(details.localFocalPoint);
-      _lastPosition = localPosition;
       _controller!.startDrawing(localPosition);
     } else if (widget.tool == DrawingTool.text) {
-      final localPosition = _transformPosition(details.localFocalPoint);
       _showTextInputDialog(localPosition);
-    } else if (widget.tool == DrawingTool.hand) {
-      // Ничего не делаем, просто запоминаем начальную позицию
     } else if (widget.tool == DrawingTool.selection) {
-      final localPosition = _transformPosition(details.localFocalPoint);
       _controller!.startDrawing(localPosition);
     } else if (widget.tool == DrawingTool.fill) {
-      final localPosition = _transformPosition(details.localFocalPoint);
       _controller!.startDrawing(localPosition);
     }
   }
@@ -264,37 +294,46 @@ class ComicCanvasState extends State<ComicCanvas> {
         _offset += details.focalPoint - _lastFocalPoint!;
         _lastFocalPoint = details.focalPoint;
       });
-    } else if (widget.tool == DrawingTool.brush ||
+      return;
+    }
+
+    // Проверка, находится ли точка внутри видимой области холста
+    final Rect visibleRect = Rect.fromLTWH(
+        _offset.dx,
+        _offset.dy,
+        widget.currentCell.width * _scale,
+        widget.currentCell.height * _scale
+    );
+
+    if (!visibleRect.contains(details.localFocalPoint)) {
+      // Если точка вне видимой области, ограничиваем ее
+      final double newX = math.max(visibleRect.left, math.min(details.localFocalPoint.dx, visibleRect.right));
+      final double newY = math.max(visibleRect.top, math.min(details.localFocalPoint.dy, visibleRect.bottom));
+      details = ScaleUpdateDetails(
+        focalPoint: details.focalPoint,
+        localFocalPoint: Offset(newX, newY),
+        scale: details.scale,
+        horizontalScale: details.horizontalScale,
+        verticalScale: details.verticalScale,
+        rotation: details.rotation,
+      );
+    }
+
+    // Трансформируем позицию и применяем ограничения
+    final localPosition = _transformPosition(details.localFocalPoint);
+
+    setState(() {
+      _lastPosition = localPosition;
+    });
+
+    if (widget.tool == DrawingTool.brush ||
         widget.tool == DrawingTool.pencil ||
         widget.tool == DrawingTool.marker) {
-      // Рисование
-      final localPosition = _transformPosition(details.localFocalPoint);
-      setState(() {
-        _lastPosition = localPosition;
-      });
       _controller!.continueDrawing(localPosition);
     } else if (widget.tool == DrawingTool.eraser) {
-      // Стирание
-      final localPosition = _transformPosition(details.localFocalPoint);
-      setState(() {
-        _lastPosition = localPosition;
-      });
       _controller!.continueDrawing(localPosition);
     } else if (widget.tool == DrawingTool.selection) {
-      // Перемещение выбранного элемента
-      final localPosition = _transformPosition(details.localFocalPoint);
       _controller!.continueDrawing(localPosition);
-    } else {
-      // Масштабирование холста для других инструментов
-      setState(() {
-        // Ограничение масштаба между 0.5 и 3.0
-        _scale = max(0.5, min(details.scale * _scale, 3.0));
-
-        // Обновление смещения при масштабировании
-        final newFocalPoint = details.focalPoint;
-        _offset += newFocalPoint - _lastFocalPoint!;
-        _lastFocalPoint = newFocalPoint;
-      });
     }
   }
 
@@ -316,12 +355,19 @@ class ComicCanvasState extends State<ComicCanvas> {
 
   // Преобразование экранных координат в координаты холста
   Offset _transformPosition(Offset screenPosition) {
-    // Учитываем смещение и масштаб
-    final x = (screenPosition.dx - _offset.dx) / _scale;
-    final y = (screenPosition.dy - _offset.dy) / _scale;
-    return Offset(x, y);
-  }
+    // Учитываем смещение и масштаб для преобразования из экранных координат в координаты холста
+    final double x = (screenPosition.dx - _offset.dx) / _scale;
+    final double y = (screenPosition.dy - _offset.dy) / _scale;
 
+    // Ограничиваем координаты в пределах ячейки
+    final double cellWidth = widget.currentCell.width.toDouble();
+    final double cellHeight = widget.currentCell.height.toDouble();
+
+    final double constrainedX = math.max(0, math.min(x, cellWidth)).toDouble();
+    final double constrainedY = math.max(0, math.min(y, cellHeight)).toDouble();
+
+    return Offset(constrainedX, constrainedY);
+  }
   // Показ диалога для ввода текста
   void _showTextInputDialog(Offset position) {
     if (_controller == null) return;
