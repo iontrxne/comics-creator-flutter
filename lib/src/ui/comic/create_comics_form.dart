@@ -261,7 +261,7 @@ class _CreateComicFormState extends ConsumerState<CreateComicForm> {
                     ),
                     child: const Text(
                       'Создать',
-                      style: TextStyle(fontSize: 20, color: Colors.brown),
+                      style: TextStyle(fontSize: 20, color: Palette.orangeAccent),
                     ),
                   ),
                 if (widget.isEdit == true && widget.comicId != null)
@@ -376,7 +376,7 @@ class _CreateComicFormState extends ConsumerState<CreateComicForm> {
                     ),
                     child: const Text(
                       'Обновить',
-                      style: TextStyle(fontSize: 20, color: Colors.brown),
+                      style: TextStyle(fontSize: 20, color: Palette.orangeAccent),
                     ),
                   )
               ],

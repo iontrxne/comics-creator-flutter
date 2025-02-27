@@ -72,7 +72,7 @@ class _ToolPanelState extends State<ToolPanel> {
       height: 70, // Увеличиваем высоту панели
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
       ),
       margin: const EdgeInsets.all(8),
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -104,18 +104,18 @@ class _ToolPanelState extends State<ToolPanel> {
             tool: DrawingTool.hand,
             tooltip: 'Перемещение',
           ),
-          const SizedBox(width: 4),
-          _buildToolButton(
-            icon: Icons.format_color_fill,
-            tool: DrawingTool.fill,
-            tooltip: 'Заливка',
-          ),
-          const SizedBox(width: 4),
-          _buildToolButton(
-            icon: Icons.cleaning_services,
-            tool: DrawingTool.eraser,
-            tooltip: 'Ластик',
-          ),
+          // const SizedBox(width: 4),
+          // _buildToolButton(
+          //   icon: Icons.format_color_fill,
+          //   tool: DrawingTool.fill,
+          //   tooltip: 'Заливка',
+          // ),
+          // const SizedBox(width: 4),
+          // _buildToolButton(
+          //   icon: Icons.cleaning_services,
+          //   tool: DrawingTool.eraser,
+          //   tooltip: 'Ластик',
+          // ),
           const VerticalDivider(color: Colors.white30, width: 16),
           _buildColorButton(context),
           const VerticalDivider(color: Colors.white30, width: 16),
@@ -136,7 +136,7 @@ class _ToolPanelState extends State<ToolPanel> {
     DrawingTool.fill: {'icon': Icons.format_color_fill, 'label': 'Заливка'},
     DrawingTool.eraser: {'icon': Icons.cleaning_services, 'label': 'Ластик'},
     DrawingTool.marker: {'icon': Icons.edit, 'label': 'Маркер'},
-    DrawingTool.pencil: {'icon': Icons.create, 'label': 'Карандаш'},
+    DrawingTool.pencil: {'icon': Icons.draw , 'label': 'Карандаш'},
     DrawingTool.brush: {'icon': Icons.brush, 'label': 'Кисть'},
   };
 
@@ -262,6 +262,7 @@ class _ToolPanelState extends State<ToolPanel> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          backgroundColor: Colors.white,
           title: const Text('Выберите цвет'),
           content: SingleChildScrollView(
             child: ColorPicker(
@@ -278,13 +279,16 @@ class _ToolPanelState extends State<ToolPanel> {
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text('Отмена'),
+              child: const Text('Отмена', style: TextStyle(color: Colors.black),),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: const Text('Выбрать'),
+              style: TextButton.styleFrom(
+                backgroundColor: Palette.orangeAccent
+              ),
+              child: const Text('Выбрать', style: TextStyle(color: Colors.white),),
               onPressed: () {
                 setState(() {
                   _selectedColor = pickerColor;
@@ -340,14 +344,13 @@ class _ToolPanelState extends State<ToolPanel> {
         children: [
           Container(
             height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 16), // Добавляем внутренние отступы
             child: Slider(
               value: safeValue,
               min: minValue,
               max: maxValue,
-              divisions: ((maxValue - minValue) * 2).round(),
+              divisions: ((maxValue - minValue) * 1).round(),
               activeColor: Palette.orangeAccent,
-              inactiveColor: Colors.white30,
+              inactiveColor: Colors.black,
               onChanged: (value) {
                 setState(() {
                   _currentThickness = value;

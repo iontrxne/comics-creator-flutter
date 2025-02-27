@@ -86,7 +86,6 @@ class _ComicPreviewPageState extends ConsumerState<ComicPreviewPage> {
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -111,7 +110,7 @@ class _ComicPreviewPageState extends ConsumerState<ComicPreviewPage> {
       ),
       // Кнопки навигации
       bottomNavigationBar: BottomAppBar(
-        color: Colors.black.withOpacity(0.7),
+        color: Palette.orangeAccent,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [

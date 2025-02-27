@@ -287,7 +287,7 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
           ],
         ),
       ),
-      floatingActionButton: _buildFloatingActionButton(editorState),
+      // floatingActionButton: _buildFloatingActionButton(editorState),
     );
   }
 
@@ -655,7 +655,8 @@ class ComicEditorPageState extends ConsumerState<ComicEditorPage> {
   // Панель выбора страниц внизу экрана
   Widget _buildPageSelector(EditorState state) {
     return Container(
-      height: 60,
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      height: 70,
       color: Colors.black.withOpacity(0.2),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,

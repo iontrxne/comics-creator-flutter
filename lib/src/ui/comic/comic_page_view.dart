@@ -1,6 +1,7 @@
 // lib/src/ui/comic/comic_page_view.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/palette.dart';
 import '../../logic/comic/editor_provider.dart' as editor; // Добавляем префикс
@@ -119,77 +120,97 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
   // Панель инструментов страницы
   Widget _buildPageToolbar(editor.Page page) {
     return Container(
-      height: 50,
-      color: Colors.black.withOpacity(0.8),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      color: Palette.orangeDark,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             'Страница ${page.pageNumber}',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Colors.white, fontSize: 10),
           ),
-          const SizedBox(width: 16),
 
           // Переключатель типа расположения
-          Row(
-            children: [
-              const Text('Тип расположения:', style: TextStyle(color: Colors.white)),
-              const SizedBox(width: 8),
-              DropdownButton<editor.CellLayoutType>(
-                value: page.layoutType,
-                dropdownColor: Colors.black,
-                style: const TextStyle(color: Colors.white),
-                underline: Container(
-                  height: 2,
-                  color: Palette.orangeAccent,
+          Container(
+            padding: EdgeInsets.only(bottom: 4),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: Colors.white, width: 1), // Белая рамка только снизу
+              ),
+            ),
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero, // Убираем отступы внутри кнопки
+                minimumSize: const Size(0, 0), // Убираем минимальный размер
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap, // Уменьшаем область нажатия
+                visualDensity: const VisualDensity(horizontal: -4), // Уменьшаем расстояние между иконкой и текстом
+              ),
+            icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.white, size: 20), // Уменьшаем иконку
+            onPressed: () {
+              final RenderBox renderBox = context.findRenderObject() as RenderBox;
+              final position = renderBox.localToGlobal(Offset.zero);
+              final size = renderBox.size;
+              showMenu<editor.CellLayoutType>(
+                color: Palette.white,
+                context: context,
+                position: RelativeRect.fromSize(
+                  Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                  size,
                 ),
-                onChanged: (editor.CellLayoutType? newValue) {
-                  if (newValue != null) {
-                    ref.read(editor.comicEditorProvider.notifier).setPageLayoutType(newValue);
-                  }
-                },
                 items: [
-                  DropdownMenuItem<editor.CellLayoutType>(
+                  PopupMenuItem(
                     value: editor.CellLayoutType.free,
                     child: Text(
                       'Свободное',
-                      style: TextStyle(color: page.layoutType == editor.CellLayoutType.free
-                          ? Palette.orangeAccent
-                          : Colors.white),
+                      style: TextStyle(
+                          color: page.layoutType == editor.CellLayoutType.free
+                              ? Palette.orangeAccent
+                              : Colors.black),
                     ),
                   ),
-                  DropdownMenuItem<editor.CellLayoutType>(
+                  PopupMenuItem(
                     value: editor.CellLayoutType.grid,
                     child: Text(
                       'По сетке',
-                      style: TextStyle(color: page.layoutType == editor.CellLayoutType.grid
-                          ? Palette.orangeAccent
-                          : Colors.white),
+                      style: TextStyle(
+                          color: page.layoutType == editor.CellLayoutType.grid
+                              ? Palette.orangeAccent
+                              : Colors.black),
                     ),
                   ),
-                ],
-              ),
-            ],
+                ]
+              ).then((editor.CellLayoutType? newValue) {
+                if (newValue != null) {
+                  ref.read(editor.comicEditorProvider.notifier).setPageLayoutType(newValue);
+                }
+              });
+            },
+            label: const Text(
+              'Тип расположения',
+              style: TextStyle(color: Colors.white)
+            ),
+          ),
           ),
 
-          const Spacer(),
+
 
           // Кнопки для добавления ячеек
           if (page.layoutType == editor.CellLayoutType.grid)
             ElevatedButton.icon(
-              icon: const Icon(Icons.grid_on),
-              label: const Text('Добавить ячейку в сетку'),
+              icon: const Icon(Icons.grid_on, color: Palette.orangeDark,),
+              label: const Text('Добавить ячейку', style: TextStyle(color: Palette.orangeDark),),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Palette.orangeAccent,
+                backgroundColor: Palette.white,
               ),
               onPressed: () => _showGridCellDialog(),
             )
           else
             ElevatedButton.icon(
-              icon: const Icon(Icons.add_box),
-              label: const Text('Добавить ячейку'),
+              icon: const Icon(Icons.add_box, color: Palette.orangeDark,),
+              label: const Text('Добавить ячейку', style: TextStyle(color: Palette.orangeDark),),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Palette.orangeAccent,
+                backgroundColor: Palette.white,
               ),
               onPressed: () {
                 ref.read(editor.comicEditorProvider.notifier).addCell();
@@ -210,6 +231,7 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
         title: const Text('Добавить ячейку в сетку'),
         content: StatefulBuilder(
           builder: (context, setState) {
@@ -286,12 +308,12 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
                           margin: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
                             color: isSelected ? Palette.orangeAccent : Colors.grey.shade300,
-                            border: Border.all(color: Colors.black),
+                            border: isSelected ? null : Border.all(color: Colors.black),
                           ),
                           child: Center(
                             child: Text(
                               isSelected ? 'Выбрано' : '',
-                              style: const TextStyle(fontSize: 10),
+                              style: const TextStyle(fontSize: 10, color: Colors.white),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -307,7 +329,7 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
+            child: const Text('Отмена', style: TextStyle(color: Colors.black),),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -322,7 +344,7 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
                   colCount
               );
             },
-            child: const Text('Добавить'),
+            child: const Text('Добавить', style: TextStyle(color: Colors.white),),
           ),
         ],
       ),

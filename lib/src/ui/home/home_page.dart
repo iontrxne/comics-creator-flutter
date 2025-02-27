@@ -134,14 +134,14 @@ class HomePage extends ConsumerWidget {
                               Text(
                                 '+',
                                 style: TextStyle(
-                                  fontSize: 40,
+                                  fontSize: 40, color: Palette.orangeAccent
                                 ),
                               ),
                               SizedBox(width: 8),
                               Text(
                                 'Создай новый комикс!',
                                 style: TextStyle(
-                                  fontSize: 20,
+                                  fontSize: 20, color: Palette.orangeAccent
                                 ),
                               ),
                             ],
@@ -265,26 +265,25 @@ class HomePage extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.menu_book_outlined,
             size: 80,
             color: Colors.white,
           ),
-          const SizedBox(height: 16),
-          const Text(
+          SizedBox(height: 16),
+          Text(
             'У тебя пока нет комиксов',
             style: TextStyle(
               color: Colors.white,
               fontSize: 24,
-              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Создай свой первый комикс прямо сейчас!',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -292,42 +291,42 @@ class HomePage extends ConsumerWidget {
               fontSize: 16,
             ),
           ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Palette.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 12,
-              ),
-            ),
-            onPressed: () async {
-              final comicId = await Navigator.of(context).push<int?>(
-                  MaterialPageRoute(builder: (c) => const CreateComicForm())
-              );
-
-              if (comicId != null && context.mounted) {
-                // Если успешно создан комикс, сразу переходим в редактор
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => ComicEditorPage(
-                      comicId: comicId,
-                      comicTitle: 'Новый комикс',
-                    ),
-                  ),
-                );
-                // Обновляем список комиксов после возврата из редактора
-                ref.refresh(comicsListProvider);
-              }
-            },
-            child: const Text(
-              'Создать комикс',
-              style: TextStyle(
-                color: Palette.orangeDark,
-                fontSize: 18,
-              ),
-            ),
-          ),
+          // const SizedBox(height: 24),
+          // ElevatedButton(
+          //   style: ElevatedButton.styleFrom(
+          //     backgroundColor: Palette.white,
+          //     padding: const EdgeInsets.symmetric(
+          //       horizontal: 24,
+          //       vertical: 12,
+          //     ),
+          //   ),
+          //   onPressed: () async {
+          //     final comicId = await Navigator.of(context).push<int?>(
+          //         MaterialPageRoute(builder: (c) => const CreateComicForm())
+          //     );
+          //
+          //     if (comicId != null && context.mounted) {
+          //       // Если успешно создан комикс, сразу переходим в редактор
+          //       await Navigator.of(context).push(
+          //         MaterialPageRoute(
+          //           builder: (context) => ComicEditorPage(
+          //             comicId: comicId,
+          //             comicTitle: 'Новый комикс',
+          //           ),
+          //         ),
+          //       );
+          //       // Обновляем список комиксов после возврата из редактора
+          //       ref.refresh(comicsListProvider);
+          //     }
+          //   },
+          //   child: const Text(
+          //     'Создать комикс',
+          //     style: TextStyle(
+          //       color: Palette.orangeDark,
+          //       fontSize: 18,
+          //     ),
+          //   ),
+          // ),
         ],
       ),
     );
