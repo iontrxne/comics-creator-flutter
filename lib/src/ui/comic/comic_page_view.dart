@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/palette.dart';
 import '../../logic/comic/editor_provider.dart' as editor; // Добавляем префикс
+import 'canvas/canvas_controller.dart';
+import 'canvas/comic_canvas.dart';
 import 'canvas/tool_panel.dart';
 
 /// Виджет для отображения всей страницы комикса с ячейками
@@ -121,80 +123,93 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
     return Container(
       height: 50,
       color: Colors.black.withOpacity(0.8),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 8), // Уменьшил отступы
       child: Row(
         children: [
-          Text(
-            'Страница ${page.pageNumber}',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          // Информация о странице
+          Expanded(
+            flex: 1,
+            child: Text(
+              'Страница ${page.pageNumber}',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis, // Добавил эллипсис при переполнении
+            ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8), // Уменьшил отступ
 
           // Переключатель типа расположения
-          Row(
-            children: [
-              const Text('Тип расположения:', style: TextStyle(color: Colors.white)),
-              const SizedBox(width: 8),
-              DropdownButton<editor.CellLayoutType>(
-                value: page.layoutType,
-                dropdownColor: Colors.black,
-                style: const TextStyle(color: Colors.white),
-                underline: Container(
-                  height: 2,
-                  color: Palette.orangeAccent,
+          Expanded(
+            flex: 2,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Тип:', style: TextStyle(color: Colors.white)), // Сократил текст
+                const SizedBox(width: 4), // Уменьшил отступ
+                DropdownButton<editor.CellLayoutType>(
+                  value: page.layoutType,
+                  dropdownColor: Colors.black,
+                  style: const TextStyle(color: Colors.white),
+                  underline: Container(
+                    height: 2,
+                    color: Palette.orangeAccent,
+                  ),
+                  onChanged: (editor.CellLayoutType? newValue) {
+                    if (newValue != null) {
+                      ref.read(editor.comicEditorProvider.notifier).setPageLayoutType(newValue);
+                    }
+                  },
+                  items: [
+                    DropdownMenuItem<editor.CellLayoutType>(
+                      value: editor.CellLayoutType.free,
+                      child: Text(
+                        'Свободное',
+                        style: TextStyle(color: page.layoutType == editor.CellLayoutType.free
+                            ? Palette.orangeAccent
+                            : Colors.white),
+                      ),
+                    ),
+                    DropdownMenuItem<editor.CellLayoutType>(
+                      value: editor.CellLayoutType.grid,
+                      child: Text(
+                        'По сетке',
+                        style: TextStyle(color: page.layoutType == editor.CellLayoutType.grid
+                            ? Palette.orangeAccent
+                            : Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
-                onChanged: (editor.CellLayoutType? newValue) {
-                  if (newValue != null) {
-                    ref.read(editor.comicEditorProvider.notifier).setPageLayoutType(newValue);
-                  }
-                },
-                items: [
-                  DropdownMenuItem<editor.CellLayoutType>(
-                    value: editor.CellLayoutType.free,
-                    child: Text(
-                      'Свободное',
-                      style: TextStyle(color: page.layoutType == editor.CellLayoutType.free
-                          ? Palette.orangeAccent
-                          : Colors.white),
-                    ),
-                  ),
-                  DropdownMenuItem<editor.CellLayoutType>(
-                    value: editor.CellLayoutType.grid,
-                    child: Text(
-                      'По сетке',
-                      style: TextStyle(color: page.layoutType == editor.CellLayoutType.grid
-                          ? Palette.orangeAccent
-                          : Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
 
-          const Spacer(),
+          const SizedBox(width: 4),
 
           // Кнопки для добавления ячеек
-          if (page.layoutType == editor.CellLayoutType.grid)
-            ElevatedButton.icon(
-              icon: const Icon(Icons.grid_on),
-              label: const Text('Добавить ячейку в сетку'),
+          Expanded(
+            flex: 2,
+            child: page.layoutType == editor.CellLayoutType.grid
+                ? ElevatedButton.icon(
+              icon: const Icon(Icons.grid_on, size: 16), // Уменьшил размер иконки
+              label: const Text('В сетку', style: TextStyle(fontSize: 12)), // Сократил текст и уменьшил шрифт
               style: ElevatedButton.styleFrom(
                 backgroundColor: Palette.orangeAccent,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Уменьшил padding
               ),
               onPressed: () => _showGridCellDialog(),
             )
-          else
-            ElevatedButton.icon(
-              icon: const Icon(Icons.add_box),
-              label: const Text('Добавить ячейку'),
+                : ElevatedButton.icon(
+              icon: const Icon(Icons.add_box, size: 16), // Уменьшил размер иконки
+              label: const Text('Ячейка', style: TextStyle(fontSize: 12)), // Сократил текст и уменьшил шрифт
               style: ElevatedButton.styleFrom(
                 backgroundColor: Palette.orangeAccent,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Уменьшил padding
               ),
               onPressed: () {
                 ref.read(editor.comicEditorProvider.notifier).addCell();
               },
             ),
+          ),
         ],
       ),
     );
@@ -372,6 +387,85 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
           );
         }
 
+        // Добавляем номера ячеек для удобства
+        for (int row = 0; row < rowCount; row++) {
+          for (int col = 0; col < colCount; col++) {
+            gridLines.add(
+              Positioned(
+                left: cellWidth * col + 5,
+                top: cellHeight * row + 5,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${row+1}x${col+1}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+
+        // Добавляем интерактивные области для быстрого добавления ячеек
+        for (int row = 0; row < rowCount; row++) {
+          for (int col = 0; col < colCount; col++) {
+            final int currentRow = row;
+            final int currentCol = col;
+
+            gridLines.add(
+              Positioned(
+                left: cellWidth * col,
+                top: cellHeight * row,
+                width: cellWidth,
+                height: cellHeight,
+                child: GestureDetector(
+                  onDoubleTap: () {
+                    // Двойной тап для добавления ячейки в этой позиции
+                    ref.read(editor.comicEditorProvider.notifier).addCellToGrid(
+                        currentRow,
+                        currentCol,
+                        rowCount,
+                        colCount
+                    );
+                  },
+                  child: Container(
+                    color: Colors.transparent,
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+
+        // Создаем подсказку как использовать сетку
+        gridLines.add(
+          Positioned(
+            right: 10,
+            bottom: 10,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Двойной тап для добавления ячейки',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        );
+
         return Stack(children: gridLines);
       },
     );
@@ -386,20 +480,30 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
     Widget cellContent = Container(color: Colors.grey.shade100);
     try {
       if (cell.contentJson.isNotEmpty && cell.contentJson != '{"elements":[]}') {
-        // Здесь можно предварительно отрисовать содержимое ячейки
-        // Для простоты просто покажем цветную ячейку, если в ней есть контент
-        cellContent = Container(
-          color: Colors.white,
-          child: Center(
-            child: Text(
-              'Ячейка ${cell.id}',
-              style: const TextStyle(color: Colors.grey),
-            ),
+        // Отображаем содержимое ячейки через CellContent и CanvasPainter
+        final content = CellContent.fromJsonString(cell.contentJson);
+        cellContent = CustomPaint(
+          painter: CanvasPainter(
+            cell: cell,
+            content: content,
+            currentPoints: [],
+            currentTool: DrawingTool.brush,
+            eraserSize: 3.0,
           ),
+          size: Size(cell.width, cell.height),
         );
       }
     } catch (e) {
       print("Ошибка при отрисовке содержимого ячейки: $e");
+      cellContent = Container(
+        color: Colors.white,
+        child: Center(
+          child: Text(
+            'Ошибка отображения ячейки ${cell.id}',
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
+      );
     }
 
     // Выбираем тип виджета в зависимости от типа расположения
@@ -457,7 +561,19 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
             // Содержимое ячейки
             Positioned.fill(child: cellContent),
 
-            // Рамка для выделенной ячейки
+            // Рамка для всех ячеек (добавлено)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.grey,
+                    width: 1,
+                  ),
+                ),
+              ),
+            ),
+
+            // Усиленная рамка для выделенной ячейки
             if (isSelected)
               Positioned.fill(
                 child: Container(
@@ -481,11 +597,11 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
 
   // Создание маркеров для изменения размера ячейки
   List<Widget> _buildResizeHandles(editor.Cell cell) {
-    const double handleSize = 12;
+    const double handleSize = 22; // Увеличил размер для более удобного захвата
 
-    // Угловые маркеры
+    // Создаем маркеры для всех углов и сторон
     return [
-      // Нижний правый угол
+      // Нижний правый угол (увеличение/уменьшение по диагонали)
       Positioned(
         right: 0,
         bottom: 0,
@@ -497,30 +613,30 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
               _resizingCellId = cell.id;
               _initialWidth = cell.width;
               _initialHeight = cell.height;
-              _resizeStartPosition = details.localPosition;
+              _resizeStartPosition = details.globalPosition;
             });
           },
           onPanUpdate: (details) {
-            if (_resizingCellId == cell.id) {
-              final delta = details.localPosition - _resizeStartPosition!;
+            if (_resizingCellId == cell.id && _initialWidth != null && _initialHeight != null && _resizeStartPosition != null) {
+              final delta = details.globalPosition - _resizeStartPosition!;
 
-              // Применяем визуальное изменение размера
-              setState(() {});
+              // Рассчитываем новые размеры с учетом смещения
+              final newWidth = math.max(_initialWidth! + delta.dx, 100.0); // Минимальная ширина 100
+              final newHeight = math.max(_initialHeight! + delta.dy, 100.0); // Минимальная высота 100
+
+              // Предварительно отображаем изменение размера
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                // Используем провайдер для изменения размера через модель
+                ref.read(editor.comicEditorProvider.notifier).resizeCell(
+                    cell.id!,
+                    newWidth,
+                    newHeight
+                );
+              });
             }
           },
           onPanEnd: (details) {
             if (_resizingCellId == cell.id) {
-              // Вычисляем новый размер
-              final newWidth = math.max(_initialWidth! + 10, 100.0); // Минимальная ширина 100
-              final newHeight = math.max(_initialHeight! + 10, 100.0); // Минимальная высота 100
-
-              // Применяем изменения через провайдер
-              ref.read(editor.comicEditorProvider.notifier).resizeCell(
-                  cell.id!,
-                  newWidth,
-                  newHeight
-              );
-
               setState(() {
                 _resizingCellId = null;
                 _initialWidth = null;
@@ -530,10 +646,166 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
             }
           },
           child: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: Palette.orangeAccent,
               shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
             ),
+            child: const Icon(Icons.open_in_full, color: Colors.white, size: 14),
+          ),
+        ),
+      ),
+
+      // Правый край (изменение ширины)
+      Positioned(
+        right: 0,
+        top: cell.height / 2 - handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+        child: GestureDetector(
+          onPanStart: (details) {
+            setState(() {
+              _resizingCellId = cell.id;
+              _initialWidth = cell.width;
+              _resizeStartPosition = details.globalPosition;
+            });
+          },
+          onPanUpdate: (details) {
+            if (_resizingCellId == cell.id && _initialWidth != null && _resizeStartPosition != null) {
+              final delta = details.globalPosition - _resizeStartPosition!;
+
+              // Рассчитываем новую ширину с учетом смещения
+              final newWidth = math.max(_initialWidth! + delta.dx, 100.0); // Минимальная ширина 100
+
+              // Применяем изменения через провайдер
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(editor.comicEditorProvider.notifier).resizeCell(
+                    cell.id!,
+                    newWidth,
+                    cell.height
+                );
+              });
+            }
+          },
+          onPanEnd: (details) {
+            if (_resizingCellId == cell.id) {
+              setState(() {
+                _resizingCellId = null;
+                _initialWidth = null;
+                _resizeStartPosition = null;
+              });
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Palette.orangeAccent,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: const Icon(Icons.keyboard_double_arrow_right, color: Colors.white, size: 14),
+          ),
+        ),
+      ),
+
+      // Нижний край (изменение высоты)
+      Positioned(
+        bottom: 0,
+        left: cell.width / 2 - handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+        child: GestureDetector(
+          onPanStart: (details) {
+            setState(() {
+              _resizingCellId = cell.id;
+              _initialHeight = cell.height;
+              _resizeStartPosition = details.globalPosition;
+            });
+          },
+          onPanUpdate: (details) {
+            if (_resizingCellId == cell.id && _initialHeight != null && _resizeStartPosition != null) {
+              final delta = details.globalPosition - _resizeStartPosition!;
+
+              // Рассчитываем новую высоту с учетом смещения
+              final newHeight = math.max(_initialHeight! + delta.dy, 100.0); // Минимальная высота 100
+
+              // Применяем изменения через провайдер
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(editor.comicEditorProvider.notifier).resizeCell(
+                    cell.id!,
+                    cell.width,
+                    newHeight
+                );
+              });
+            }
+          },
+          onPanEnd: (details) {
+            if (_resizingCellId == cell.id) {
+              setState(() {
+                _resizingCellId = null;
+                _initialHeight = null;
+                _resizeStartPosition = null;
+              });
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Palette.orangeAccent,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: const Icon(Icons.keyboard_double_arrow_down, color: Colors.white, size: 14),
+          ),
+        ),
+      ),
+
+      // Маркер перемещения (для всей ячейки)
+      Positioned(
+        left: 8,
+        top: 8,
+        width: handleSize,
+        height: handleSize,
+        child: GestureDetector(
+          onPanStart: (details) {
+            setState(() {
+              _draggingCellId = cell.id;
+              _cellStartPosition = Offset(cell.positionX, cell.positionY);
+              _dragStartPosition = details.globalPosition;
+            });
+          },
+          onPanUpdate: (details) {
+            if (_draggingCellId == cell.id && _cellStartPosition != null && _dragStartPosition != null) {
+              final delta = details.globalPosition - _dragStartPosition!;
+
+              // Рассчитываем новую позицию
+              final newPosX = _cellStartPosition!.dx + delta.dx;
+              final newPosY = _cellStartPosition!.dy + delta.dy;
+
+              // Применяем позицию через провайдер
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(editor.comicEditorProvider.notifier).moveCell(
+                    cell.id!,
+                    math.max(0, newPosX),
+                    math.max(0, newPosY)
+                );
+              });
+            }
+          },
+          onPanEnd: (details) {
+            if (_draggingCellId == cell.id) {
+              setState(() {
+                _draggingCellId = null;
+                _cellStartPosition = null;
+                _dragStartPosition = null;
+              });
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Palette.orangeAccent,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: const Icon(Icons.open_with, color: Colors.white, size: 14),
           ),
         ),
       ),
@@ -554,9 +826,23 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
       // Ограничиваем масштаб
       _scale = math.max(0.5, math.min(_scale, 3.0));
 
-      // Обновляем смещение
+      // Обновляем смещение с ограничениями
       if (_lastFocalPoint != null) {
-        _offset += details.focalPoint - _lastFocalPoint!;
+        final Offset delta = details.focalPoint - _lastFocalPoint!;
+
+        // Получаем размеры видимой области
+        final Size viewportSize = context.size ?? const Size(800, 1200);
+
+        // Рассчитываем максимальное допустимое смещение
+        final double maxOffsetX = viewportSize.width * 0.5;
+        final double maxOffsetY = viewportSize.height * 0.5;
+
+        // Ограничиваем смещение
+        final Offset newOffset = _offset + delta;
+        _offset = Offset(
+          newOffset.dx.clamp(-maxOffsetX, maxOffsetX),
+          newOffset.dy.clamp(-maxOffsetY, maxOffsetY),
+        );
       }
       _lastFocalPoint = details.focalPoint;
     });

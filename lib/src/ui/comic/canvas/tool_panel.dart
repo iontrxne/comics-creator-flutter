@@ -68,66 +68,75 @@ class _ToolPanelState extends State<ToolPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 70, // Увеличиваем высоту панели
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      margin: const EdgeInsets.all(8),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildDrawToolsTypeButton(context: context),
-          const SizedBox(width: 4), // Добавляем разделители между элементами
-          _buildToolButton(
-            icon: Icons.text_fields,
-            tool: DrawingTool.text,
-            tooltip: 'Текст',
+    return Stack(
+      children: [
+        // Основная панель инструментов (горизонтальная)
+        Container(
+          height: 60, // Уменьшил высоту с 70 до 60
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(8),
           ),
-          const SizedBox(width: 4),
-          _buildToolButton(
-            icon: Icons.image,
-            tool: DrawingTool.image,
-            tooltip: 'Изображение',
+          margin: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            children: [
+              _buildDrawToolsTypeButton(context: context),
+              const SizedBox(width: 4),
+              _buildToolButton(
+                icon: Icons.text_fields,
+                tool: DrawingTool.text,
+                tooltip: 'Текст',
+              ),
+              const SizedBox(width: 4),
+              _buildToolButton(
+                icon: Icons.image,
+                tool: DrawingTool.image,
+                tooltip: 'Изображение',
+              ),
+              const SizedBox(width: 4),
+              _buildToolButton(
+                icon: Icons.select_all,
+                tool: DrawingTool.selection,
+                tooltip: 'Выбор',
+              ),
+              const SizedBox(width: 4),
+              _buildToolButton(
+                icon: Icons.pan_tool,
+                tool: DrawingTool.hand,
+                tooltip: 'Перемещение',
+              ),
+              const SizedBox(width: 4),
+              _buildToolButton(
+                icon: Icons.format_color_fill,
+                tool: DrawingTool.fill,
+                tooltip: 'Заливка',
+              ),
+              const SizedBox(width: 4),
+              _buildToolButton(
+                icon: Icons.cleaning_services,
+                tool: DrawingTool.eraser,
+                tooltip: 'Ластик',
+              ),
+              const VerticalDivider(color: Colors.white30, width: 12), // Уменьшил ширину
+              _buildColorButton(context),
+              const Spacer(), // Добавлен Spacer для правильного позиционирования
+            ],
           ),
-          const SizedBox(width: 4),
-          _buildToolButton(
-            icon: Icons.select_all,
-            tool: DrawingTool.selection,
-            tooltip: 'Выбор',
+        ),
+
+        // Вертикальный ползунок толщины справа снизу
+        if (widget.selectedTool == DrawingTool.brush ||
+            widget.selectedTool == DrawingTool.pencil ||
+            widget.selectedTool == DrawingTool.marker ||
+            widget.selectedTool == DrawingTool.eraser ||
+            widget.selectedTool == DrawingTool.text)
+          Positioned(
+            right: 12,
+            bottom: 70, // Позиционируем над основной панелью
+            child: _buildVerticalThicknessSlider(),
           ),
-          const SizedBox(width: 4),
-          _buildToolButton(
-            icon: Icons.pan_tool,
-            tool: DrawingTool.hand,
-            tooltip: 'Перемещение',
-          ),
-          const SizedBox(width: 4),
-          _buildToolButton(
-            icon: Icons.format_color_fill,
-            tool: DrawingTool.fill,
-            tooltip: 'Заливка',
-          ),
-          const SizedBox(width: 4),
-          _buildToolButton(
-            icon: Icons.cleaning_services,
-            tool: DrawingTool.eraser,
-            tooltip: 'Ластик',
-          ),
-          const VerticalDivider(color: Colors.white30, width: 16),
-          _buildColorButton(context),
-          const VerticalDivider(color: Colors.white30, width: 16),
-          if (widget.selectedTool == DrawingTool.brush ||
-              widget.selectedTool == DrawingTool.pencil ||
-              widget.selectedTool == DrawingTool.marker ||
-              widget.selectedTool == DrawingTool.eraser)
-            _buildThicknessSlider(),
-          if (widget.selectedTool == DrawingTool.text)
-            _buildFontSizeSlider(),
-        ],
-      ),
+      ],
     );
   }
 
@@ -299,110 +308,153 @@ class _ToolPanelState extends State<ToolPanel> {
     );
   }
 
-  Widget _buildThicknessSlider() {
+  // Вертикальный ползунок толщины
+  Widget _buildVerticalThicknessSlider() {
     String label = 'Толщина';
     double minValue = 1.0;
     double maxValue = 15.0;
 
     if (widget.selectedTool == DrawingTool.eraser) {
-      label = 'Размер ластика';
+      label = 'Ластик';
       minValue = 5.0;
       maxValue = 30.0;
     } else if (widget.selectedTool == DrawingTool.pencil) {
-      label = 'Толщина карандаша';
+      label = 'Карандаш';
       minValue = 1.0;
       maxValue = 10.0;
     } else if (widget.selectedTool == DrawingTool.marker) {
-      label = 'Толщина маркера';
+      label = 'Маркер';
       minValue = 3.0;
       maxValue = 20.0;
+    } else if (widget.selectedTool == DrawingTool.text) {
+      label = 'Шрифт';
+      minValue = 8.0;
+      maxValue = 48.0;
     }
 
     // Убедимся, что текущее значение находится в допустимом диапазоне
-    double safeValue = _currentThickness;
+    double safeValue = widget.selectedTool == DrawingTool.text
+        ? _currentFontSize
+        : _currentThickness;
+
     if (safeValue < minValue) safeValue = minValue;
     if (safeValue > maxValue) safeValue = maxValue;
 
-    if (safeValue != _currentThickness) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() {
-          _currentThickness = safeValue;
-        });
-        widget.onThicknessChanged(safeValue);
-      });
-    }
-
-    return Expanded(
-      flex: 3, // Увеличиваем размер слайдера относительно других элементов
+    return Container(
+      width: 50,
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Отображение текущего значения
           Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 16), // Добавляем внутренние отступы
-            child: Slider(
-              value: safeValue,
-              min: minValue,
-              max: maxValue,
-              divisions: ((maxValue - minValue) * 2).round(),
-              activeColor: Palette.orangeAccent,
-              inactiveColor: Colors.white30,
-              onChanged: (value) {
-                setState(() {
-                  _currentThickness = value;
-                });
-                widget.onThicknessChanged(value);
-              },
+            padding: const EdgeInsets.all(4),
+            child: Text(
+              '$label\n${safeValue.toStringAsFixed(1)}',
+              style: const TextStyle(color: Colors.white, fontSize: 10),
+              textAlign: TextAlign.center,
             ),
           ),
-          SizedBox(
-            height: 12,
-            child: Text(
-              '$label: ${_currentThickness.toStringAsFixed(1)}',
-              style: const TextStyle(color: Colors.white, fontSize: 10),
+
+          // Индикатор толщины (визуальное представление)
+          if (widget.selectedTool != DrawingTool.text)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              width: safeValue,
+              height: safeValue,
+              decoration: BoxDecoration(
+                color: _selectedColor,
+                shape: BoxShape.circle,
+              ),
             ),
+
+          // Вертикальный слайдер
+          Expanded(
+            child: RotatedBox(
+              quarterTurns: 3, // Повернуть на 270 градусов (вверх)
+              child: Slider(
+                value: safeValue,
+                min: minValue,
+                max: maxValue,
+                divisions: ((maxValue - minValue) * 2).round(),
+                activeColor: Palette.orangeAccent,
+                inactiveColor: Colors.white30,
+                onChanged: (value) {
+                  setState(() {
+                    if (widget.selectedTool == DrawingTool.text) {
+                      _currentFontSize = value;
+                      widget.onFontSizeChanged(value);
+                    } else {
+                      _currentThickness = value;
+                      widget.onThicknessChanged(value);
+                    }
+                  });
+                },
+              ),
+            ),
+          ),
+
+          // Кнопки "+" и "-" для точной настройки
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.remove, color: Colors.white, size: 14),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  double newValue = safeValue - 1.0;
+                  if (newValue < minValue) newValue = minValue;
+
+                  setState(() {
+                    if (widget.selectedTool == DrawingTool.text) {
+                      _currentFontSize = newValue;
+                      widget.onFontSizeChanged(newValue);
+                    } else {
+                      _currentThickness = newValue;
+                      widget.onThicknessChanged(newValue);
+                    }
+                  });
+                },
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.add, color: Colors.white, size: 14),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  double newValue = safeValue + 1.0;
+                  if (newValue > maxValue) newValue = maxValue;
+
+                  setState(() {
+                    if (widget.selectedTool == DrawingTool.text) {
+                      _currentFontSize = newValue;
+                      widget.onFontSizeChanged(newValue);
+                    } else {
+                      _currentThickness = newValue;
+                      widget.onThicknessChanged(newValue);
+                    }
+                  });
+                },
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
+  // Сохраняем эти функции для совместимости со старым кодом
+  Widget _buildThicknessSlider() {
+    return Container(); // Пустой контейнер, т.к. используем вертикальный слайдер
+  }
 
   Widget _buildFontSizeSlider() {
-    return Expanded(
-      flex: 3, // Увеличиваем размер слайдера
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 16), // Добавляем внутренние отступы
-            child: Slider(
-              value: _currentFontSize,
-              min: 8.0,  // Минимальный размер шрифта
-              max: 48.0,  // Максимальный размер шрифта
-              divisions: 20,
-              activeColor: Palette.orangeAccent,
-              inactiveColor: Colors.white30,
-              onChanged: (value) {
-                setState(() {
-                  _currentFontSize = value;
-                });
-                widget.onFontSizeChanged(value);
-              },
-            ),
-          ),
-          SizedBox(
-            height: 12,
-            child: Text(
-              'Размер: ${_currentFontSize.toStringAsFixed(1)}',
-              style: const TextStyle(color: Colors.white, fontSize: 10),
-            ),
-          ),
-        ],
-      ),
-    );
+    return Container(); // Пустой контейнер, т.к. используем вертикальный слайдер
   }
 }

@@ -381,7 +381,11 @@ class CanvasController {
   void startDrawing(Offset position) {
     // Проверяем, находится ли позиция внутри границ ячейки
     if (!isPositionInsideCell(position)) {
-      return; // Не начинаем рисование, если точка вне ячейки
+      // Ограничиваем позицию границами ячейки
+      position = Offset(
+          math.max(0, math.min(position.dx, _content.canvasWidth)),
+          math.max(0, math.min(position.dy, _content.canvasHeight))
+      );
     }
 
     if (currentTool == DrawingTool.brush ||
@@ -403,7 +407,11 @@ class CanvasController {
   void continueDrawing(Offset position) {
     // Проверяем, находится ли позиция внутри границ ячейки
     if (!isPositionInsideCell(position)) {
-      return; // Не продолжаем рисование, если точка вне ячейки
+      // Ограничиваем позицию границами ячейки
+      position = Offset(
+          math.max(0, math.min(position.dx, _content.canvasWidth)),
+          math.max(0, math.min(position.dy, _content.canvasHeight))
+      );
     }
 
     if (currentTool == DrawingTool.brush ||
@@ -816,6 +824,5 @@ class CanvasController {
       _content.elements[_selectedElementIndex!] = updatedElement;
       notifyContentChanged(previousContent);
     }
-    // Для элементов кисти перемещение было бы более сложным
   }
 }
