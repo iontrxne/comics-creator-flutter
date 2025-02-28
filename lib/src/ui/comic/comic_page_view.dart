@@ -600,6 +600,9 @@ class _ComicPageViewState extends ConsumerState<ComicPageView> {
   }
 
   void _showCellCoordinatesDialog(editor.Cell cell) {
+    // Устанавливаем ячейку как выбранную при долгом нажатии, что активирует оранжевую рамку
+    ref.read(editor.comicEditorProvider.notifier).setCurrentCell(cell.id!);
+
     // Контроллеры для полей ввода
     final TextEditingController posXController = TextEditingController(text: cell.positionX.toString());
     final TextEditingController posYController = TextEditingController(text: cell.positionY.toString());

@@ -702,12 +702,12 @@ class CanvasController {
     if (!isPositionInsideCell(position)) {
       // Корректируем позицию, чтобы изображение было внутри ячейки
       position = Offset(
-          math.max(0, math.min(position.dx, _content.canvasWidth)),
-          math.max(0, math.min(position.dy, _content.canvasHeight))
+        math.max(0, math.min(position.dx, _content.canvasWidth)),
+        math.max(0, math.min(position.dy, _content.canvasHeight)),
       );
     }
 
-    // Сохраняем текущее состояние перед изменением
+    // Сохраняем текущее состояние (для Undo)
     final previousContent = _content.copy();
 
     final element = ImageElement(
@@ -719,9 +719,10 @@ class CanvasController {
     );
     _content.addElement(element);
 
-    // Передаем предыдущее состояние
+    // Вызываем общий notify
     notifyContentChanged(previousContent);
   }
+
 
   // Очистка содержимого
   void clear() {

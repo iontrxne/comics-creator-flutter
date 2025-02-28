@@ -68,77 +68,91 @@ class _ToolPanelState extends State<ToolPanel> {
 
   @override
   Widget build(BuildContext context) {
+    // Проверяем, нужно ли показывать ползунок
+    bool showSlider = widget.selectedTool == DrawingTool.brush ||
+        widget.selectedTool == DrawingTool.pencil ||
+        widget.selectedTool == DrawingTool.marker ||
+        widget.selectedTool == DrawingTool.eraser ||
+        widget.selectedTool == DrawingTool.text;
+
+    // Фиксированная высота контейнера для обоих состояний
+    // При наличии слайдера добавляем высоту
+    double containerHeight = showSlider ? 100 : 60;
+
     return Container(
-      height: 70, // Немного увеличиваем, чтобы помещался ползунок
+      height: containerHeight,
       child: Stack(
         children: [
-          // Основная панель инструментов (горизонтальная)
-          Container(
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            margin: const EdgeInsets.all(8),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                _buildDrawToolsTypeButton(context: context),
-                const SizedBox(width: 4),
-                _buildToolButton(
-                  icon: Icons.text_fields,
-                  tool: DrawingTool.text,
-                  tooltip: 'Текст',
-                ),
-                const SizedBox(width: 4),
-                _buildToolButton(
-                  icon: Icons.image,
-                  tool: DrawingTool.image,
-                  tooltip: 'Изображение',
-                ),
-                const SizedBox(width: 4),
-                _buildToolButton(
-                  icon: Icons.select_all,
-                  tool: DrawingTool.selection,
-                  tooltip: 'Выбор',
-                ),
-                const SizedBox(width: 4),
-                _buildToolButton(
-                  icon: Icons.pan_tool,
-                  tool: DrawingTool.hand,
-                  tooltip: 'Перемещение',
-                ),
-                const SizedBox(width: 4),
-                _buildToolButton(
-                  icon: Icons.format_color_fill,
-                  tool: DrawingTool.fill,
-                  tooltip: 'Заливка',
-                ),
-                const SizedBox(width: 4),
-                _buildToolButton(
-                  icon: Icons.cleaning_services,
-                  tool: DrawingTool.eraser,
-                  tooltip: 'Ластик',
-                ),
-                const VerticalDivider(color: Colors.white30, width: 12),
-                _buildColorButton(context),
-                const Spacer(),
-              ],
+          // Основная панель инструментов (всегда прижата к верху)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: Container(
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  _buildDrawToolsTypeButton(context: context),
+                  const SizedBox(width: 4),
+                  _buildToolButton(
+                    icon: Icons.text_fields,
+                    tool: DrawingTool.text,
+                    tooltip: 'Текст',
+                  ),
+                  const SizedBox(width: 4),
+                  _buildToolButton(
+                    icon: Icons.image,
+                    tool: DrawingTool.image,
+                    tooltip: 'Изображение',
+                  ),
+                  const SizedBox(width: 4),
+                  _buildToolButton(
+                    icon: Icons.select_all,
+                    tool: DrawingTool.selection,
+                    tooltip: 'Выбор',
+                  ),
+                  const SizedBox(width: 4),
+                  _buildToolButton(
+                    icon: Icons.pan_tool,
+                    tool: DrawingTool.hand,
+                    tooltip: 'Перемещение',
+                  ),
+                  const SizedBox(width: 4),
+                  _buildToolButton(
+                    icon: Icons.format_color_fill,
+                    tool: DrawingTool.fill,
+                    tooltip: 'Заливка',
+                  ),
+                  const SizedBox(width: 4),
+                  _buildToolButton(
+                    icon: Icons.cleaning_services,
+                    tool: DrawingTool.eraser,
+                    tooltip: 'Ластик',
+                  ),
+                  const VerticalDivider(color: Colors.white30, width: 12),
+                  _buildColorButton(context),
+                  const Spacer(),
+                ],
+              ),
             ),
           ),
 
-          // Всплывающий ползунок толщины - перемещен в основную область под панелью
-          if (widget.selectedTool == DrawingTool.brush ||
-              widget.selectedTool == DrawingTool.pencil ||
-              widget.selectedTool == DrawingTool.marker ||
-              widget.selectedTool == DrawingTool.eraser ||
-              widget.selectedTool == DrawingTool.text)
+          // Ползунок толщины под панелью инструментов, если нужен
+          if (showSlider)
             Positioned(
-              right: 10,  // Фиксированное позиционирование справа
-              top: 70,    // Размещаем под панелью инструментов
-              child: Container(
-                width: 200,  // Расширяем виджет ползунка
-                child: _buildHorizontalThicknessSlider(),  // Используем горизонтальный ползунок вместо вертикального
+              left: 0,
+              right: 0,
+              top: 65, // Размещаем под основной панелью
+              child: Center(
+                child: Container(
+                  width: 250, // Фиксированная ширина для ползунка
+                  child: _buildHorizontalThicknessSlider(),
+                ),
               ),
             ),
         ],
@@ -146,25 +160,23 @@ class _ToolPanelState extends State<ToolPanel> {
     );
   }
 
+
+
   Widget _buildHorizontalThicknessSlider() {
-    String label = 'Толщина';
+    // Определяем диапазон в зависимости от инструмента
     double minValue = 1.0;
     double maxValue = 15.0;
 
     if (widget.selectedTool == DrawingTool.eraser) {
-      label = 'Ластик';
       minValue = 5.0;
       maxValue = 30.0;
     } else if (widget.selectedTool == DrawingTool.pencil) {
-      label = 'Карандаш';
       minValue = 1.0;
       maxValue = 10.0;
     } else if (widget.selectedTool == DrawingTool.marker) {
-      label = 'Маркер';
       minValue = 3.0;
       maxValue = 20.0;
     } else if (widget.selectedTool == DrawingTool.text) {
-      label = 'Шрифт';
       minValue = 8.0;
       maxValue = 48.0;
     }
@@ -178,75 +190,65 @@ class _ToolPanelState extends State<ToolPanel> {
     if (safeValue > maxValue) safeValue = maxValue;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      height: 30, // Фиксированная высота
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.7),
         borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        mainAxisSize: MainAxisSize.max,
         children: [
-          // Заголовок и значение
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
-              Text(
-                safeValue.toStringAsFixed(1),
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ],
+          // Отображение текущего значения
+          SizedBox(
+            width: 30,
+            child: Text(
+              safeValue.toStringAsFixed(1),
+              style: const TextStyle(color: Colors.white, fontSize: 10),
+            ),
           ),
 
-          // Визуализация размера (для инструментов рисования)
-          if (widget.selectedTool != DrawingTool.text)
-            Container(
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Container(
-                width: safeValue,
-                height: safeValue,
-                decoration: BoxDecoration(
-                  color: _selectedColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-
           // Горизонтальный слайдер
-          SliderTheme(
-            data: const SliderThemeData(
-              trackHeight: 4,
-              thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: RoundSliderOverlayShape(overlayRadius: 12),
-            ),
-            child: Slider(
-              value: safeValue,
-              min: minValue,
-              max: maxValue,
-              divisions: ((maxValue - minValue) * 2).round(),
-              activeColor: Palette.orangeAccent,
-              inactiveColor: Colors.white30,
-              onChanged: (value) {
-                setState(() {
-                  if (widget.selectedTool == DrawingTool.text) {
-                    _currentFontSize = value;
-                    widget.onFontSizeChanged(value);
-                  } else {
-                    _currentThickness = value;
-                    widget.onThicknessChanged(value);
-                  }
-                });
-              },
+          Expanded(
+            child: SliderTheme(
+              data: const SliderThemeData(
+                trackHeight: 2, // Уменьшенная высота трека
+                thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: RoundSliderOverlayShape(overlayRadius: 10),
+              ),
+              child: Slider(
+                value: safeValue,
+                min: minValue,
+                max: maxValue,
+                divisions: ((maxValue - minValue) * 2).round(),
+                activeColor: Palette.orangeAccent,
+                inactiveColor: Colors.white30,
+                onChanged: (value) {
+                  setState(() {
+                    if (widget.selectedTool == DrawingTool.text) {
+                      _currentFontSize = value;
+                      widget.onFontSizeChanged(value);
+                    } else {
+                      _currentThickness = value;
+                      widget.onThicknessChanged(value);
+                    }
+                  });
+                },
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
 
   DrawingTool _selectedDrawTool = DrawingTool.brush;
   final Map<DrawingTool, Map<String, dynamic>> _toolIcons = {

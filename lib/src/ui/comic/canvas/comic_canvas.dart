@@ -211,6 +211,25 @@ class ComicCanvasState extends State<ComicCanvas> {
                 ),
               ),
 
+              // Отображение координат для отладки (можно удалить в релизе)
+              if (_lastPosition != null)
+                Positioned(
+                  bottom: 60,
+                  left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Координаты: ${_lastPosition!.dx.toStringAsFixed(1)}, ${_lastPosition!.dy.toStringAsFixed(1)}\n'
+                          'Масштаб: ${(_scale * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    ),
+                  ),
+                ),
+
               // Отображение редактируемого текста
               if (_editingTextIndex != null)
                 _buildTextEditor(),
@@ -251,25 +270,31 @@ class ComicCanvasState extends State<ComicCanvas> {
     );
   }
 
+  double _lastScale = 1.0;
+
   // Обработка жестов масштабирования
   void _handleScaleStart(ScaleStartDetails details) {
+    // Сохраняем текущее состояние при начале жеста
     _startPanPosition = details.focalPoint;
     _lastFocalPoint = details.focalPoint;
+    _lastScale = 1.0; // Сбрасываем относительный масштаб при новом жесте
 
     if (_controller == null) return;
 
+    // Проверяем, используется ли инструмент для перемещения холста
     if (widget.tool == DrawingTool.hand) {
-      // Для инструмента перемещения ничего не делаем
-      return;
+      return; // Только перемещение, не рисуем
     }
 
-    // Для всех инструментов рисования трансформируем координаты и применяем ограничения
+    // Переводим координаты экрана в координаты холста
     final localPosition = _transformPosition(details.localFocalPoint);
 
+    // Сохраняем позицию для отображения
     setState(() {
       _lastPosition = localPosition;
     });
 
+    // Начинаем рисование, если используется соответствующий инструмент
     if (widget.tool == DrawingTool.brush ||
         widget.tool == DrawingTool.pencil ||
         widget.tool == DrawingTool.marker) {
@@ -285,47 +310,73 @@ class ComicCanvasState extends State<ComicCanvas> {
     }
   }
 
+
   void _handleScaleUpdate(ScaleUpdateDetails details) {
     if (_controller == null) return;
 
-    if (widget.tool == DrawingTool.hand) {
-      // Панорамирование холста
-      setState(() {
-        _offset += details.focalPoint - _lastFocalPoint!;
-        _lastFocalPoint = details.focalPoint;
-      });
-      return;
+    // Обнаруживаем тип жеста: масштабирование или перемещение
+    final bool isScaling = details.scale != 1.0;
+    final bool isPanning = (widget.tool == DrawingTool.hand) || isScaling;
+
+    if (isPanning) {
+      if (isScaling) {
+        // МАСШТАБИРОВАНИЕ
+        // Очень важно: отделяем абсолютный масштаб (_scale) от относительного (details.scale)
+
+        // Находим фокальную точку в координатах холста
+        final focalPoint = details.localFocalPoint;
+
+        // Рассчитываем положение фокальной точки относительно холста до масштабирования
+        final double dx = (focalPoint.dx - _offset.dx) / _scale;
+        final double dy = (focalPoint.dy - _offset.dy) / _scale;
+
+        // ОЧЕНЬ плавное масштабирование с малым коэффициентом
+        const double smoothFactor = 0.2;
+        double scaleDelta = (details.scale / _lastScale) - 1.0;
+        scaleDelta *= smoothFactor;
+
+        // Ограничиваем новый масштаб разумными пределами
+        final double newScale = _scale * (1.0 + scaleDelta);
+
+        // Жестко ограничиваем диапазон масштаба
+        if (newScale >= 0.5 && newScale <= 3.0) {
+          _scale = newScale;
+
+          // Коррекция смещения, чтобы точка под пальцем оставалась на месте
+          _offset = Offset(
+              focalPoint.dx - dx * _scale,
+              focalPoint.dy - dy * _scale
+          );
+        }
+
+        // Сохраняем относительный масштаб для следующего кадра
+        _lastScale = details.scale;
+
+        setState(() {});
+        return; // Выходим, так как обработали масштабирование
+      } else {
+        // ПЕРЕМЕЩЕНИЕ (инструмент руки или режим просмотра)
+        if (_lastFocalPoint != null) {
+          // Обычное перемещение холста
+          _offset += details.focalPoint - _lastFocalPoint!;
+          _lastFocalPoint = details.focalPoint;
+          setState(() {});
+        }
+
+        // Если используется инструмент руки, то прекращаем обработку
+        if (widget.tool == DrawingTool.hand) return;
+      }
     }
 
-    // Проверка, находится ли точка внутри видимой области холста
-    final Rect visibleRect = Rect.fromLTWH(
-        _offset.dx,
-        _offset.dy,
-        widget.currentCell.width * _scale,
-        widget.currentCell.height * _scale
-    );
-
-    if (!visibleRect.contains(details.localFocalPoint)) {
-      // Если точка вне видимой области, ограничиваем ее
-      final double newX = math.max(visibleRect.left, math.min(details.localFocalPoint.dx, visibleRect.right));
-      final double newY = math.max(visibleRect.top, math.min(details.localFocalPoint.dy, visibleRect.bottom));
-      details = ScaleUpdateDetails(
-        focalPoint: details.focalPoint,
-        localFocalPoint: Offset(newX, newY),
-        scale: details.scale,
-        horizontalScale: details.horizontalScale,
-        verticalScale: details.verticalScale,
-        rotation: details.rotation,
-      );
-    }
-
-    // Трансформируем позицию и применяем ограничения
+    // РИСОВАНИЕ (если не выполняем масштабирование или перемещение)
+    // Переводим координаты экрана в координаты холста
     final localPosition = _transformPosition(details.localFocalPoint);
 
     setState(() {
       _lastPosition = localPosition;
     });
 
+    // Продолжаем рисование соответствующим инструментом
     if (widget.tool == DrawingTool.brush ||
         widget.tool == DrawingTool.pencil ||
         widget.tool == DrawingTool.marker) {
@@ -337,79 +388,69 @@ class ComicCanvasState extends State<ComicCanvas> {
     }
   }
 
+
+
+
   void _handleScaleEnd(ScaleEndDetails details) {
     if (_controller == null) return;
-
     if (widget.tool == DrawingTool.brush ||
         widget.tool == DrawingTool.pencil ||
         widget.tool == DrawingTool.marker ||
-        widget.tool == DrawingTool.eraser) {
-      _controller!.endDrawing();
-      setState(() {
-        _lastPosition = null;
-      });
-    } else if (widget.tool == DrawingTool.selection) {
+        widget.tool == DrawingTool.eraser ||
+        widget.tool == DrawingTool.selection) {
       _controller!.endDrawing();
     }
+    setState(() {
+      _lastPosition = null;
+    });
+    _startPanPosition = null;
+    _lastScale = 1.0;
   }
+
+
 
   // Преобразование экранных координат в координаты холста
   Offset _transformPosition(Offset screenPosition) {
-    // Учитываем смещение и масштаб для преобразования из экранных координат в координаты холста
-    final double x = (screenPosition.dx - _offset.dx) / _scale;
-    final double y = (screenPosition.dy - _offset.dy) / _scale;
-
-    // Ограничиваем координаты в пределах ячейки
-    final double cellWidth = widget.currentCell.width.toDouble();
-    final double cellHeight = widget.currentCell.height.toDouble();
-
-    final double constrainedX = math.max(0, math.min(x, cellWidth)).toDouble();
-    final double constrainedY = math.max(0, math.min(y, cellHeight)).toDouble();
-
-    return Offset(constrainedX, constrainedY);
+    double x = (screenPosition.dx - _offset.dx) / _scale;
+    double y = (screenPosition.dy - _offset.dy) / _scale;
+    x = x.clamp(0.0, widget.currentCell.width);
+    y = y.clamp(0.0, widget.currentCell.height);
+    return Offset(x, y);
   }
+
+
+
   // Показ диалога для ввода текста
   void _showTextInputDialog(Offset position) {
     if (_controller == null) return;
-
-    _textEditingController!.text = '';
-
+    _textEditingController?.text = '';
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Введите текст'),
-          content: TextField(
-            controller: _textEditingController,
-            focusNode: _textFocusNode,
-            decoration: const InputDecoration(
-              hintText: 'Текст',
-            ),
-            maxLines: null,
+      builder: (_) => AlertDialog(
+        title: const Text('Введите текст'),
+        content: TextField(
+          controller: _textEditingController,
+          focusNode: _textFocusNode,
+          maxLines: null,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () {
-                final text = _textEditingController!.text;
-                if (text.isNotEmpty) {
-                  _controller!.addText(text, position);
-                }
-                Navigator.of(context).pop();
-              },
-              child: const Text('Добавить'),
-            ),
-          ],
-        );
-      },
-    ).then((_) {
-      _textFocusNode!.requestFocus();
-    });
+          TextButton(
+            onPressed: () {
+              final text = _textEditingController?.text.trim() ?? '';
+              if (text.isNotEmpty) {
+                _controller!.addText(text, position);
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Добавить'),
+          ),
+        ],
+      ),
+    );
   }
 
   // Виджет для редактирования текста
